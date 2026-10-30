@@ -50,3 +50,4 @@ app.*.map.json
 *.deb
 .vercel
 .env*
+android/key.properties

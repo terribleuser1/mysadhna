@@ -1,11 +1,11 @@
 {
-    "name": "my_sadhna",
-    "short_name": "my_sadhna",
+    "name": "My Sadhna - Daily Sadhana Tracker",
+    "short_name": "My Sadhna",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FAF9F6",
+    "theme_color": "#FF9933",
+    "description": "Daily Vaishnava Sadhana & Sukriti Points Tracker",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

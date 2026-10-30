@@ -1,12 +1,19 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ============================================================================
-// 1. DATA MODELS
+// 1. DATA MODELS & LOCALIZATION CONFIG
 // ============================================================================
 class PreacherItem {
   final String id;
@@ -59,6 +66,7 @@ class DevoteeProfileItem {
   final String role;
   final String? preacherId;
   final String preacherTitle;
+  final String? latestEntryDate;
 
   const DevoteeProfileItem({
     required this.id,
@@ -72,26 +80,33 @@ class DevoteeProfileItem {
     required this.role,
     required this.preacherId,
     required this.preacherTitle,
+    this.latestEntryDate,
   });
 }
 
 class PersonalStats {
-  final double totalPoints;
-  final double avgPoints;
+  final double totalSP;
+  final double avgSP;
   final int totalRounds;
   final int count;
+  final int currentStreak;
+  final int longestStreak;
   final bool hasLoggedToday;
   final DailyLogData? todayEntry;
   final List<DailyLogData> recent;
+  final String? counselorNote;
 
   const PersonalStats({
-    required this.totalPoints,
-    required this.avgPoints,
+    required this.totalSP,
+    required this.avgSP,
     required this.totalRounds,
     required this.count,
+    required this.currentStreak,
+    required this.longestStreak,
     required this.hasLoggedToday,
     required this.todayEntry,
     required this.recent,
+    this.counselorNote,
   });
 }
 
@@ -104,6 +119,7 @@ class DailyLogData {
   final int spBookReadingMinutes;
   final int spLectureMinutes;
   final int otherHearingMinutes;
+  final int shlokasMemorized;
   final double calculatedScore;
 
   const DailyLogData({
@@ -115,34 +131,152 @@ class DailyLogData {
     required this.spBookReadingMinutes,
     required this.spLectureMinutes,
     required this.otherHearingMinutes,
+    required this.shlokasMemorized,
     required this.calculatedScore,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'entry_date': entryDate,
+      'wake_up_time': wakeUpTime,
+      'bed_time': bedTime,
+      'chanting_rounds': chantingRounds,
+      'sp_book_reading_minutes': spBookReadingMinutes,
+      'sp_lecture_hearing_minutes': spLectureMinutes,
+      'other_hearing_minutes': otherHearingMinutes,
+      'shlokas_memorized': shlokasMemorized,
+      'calculated_score': calculatedScore,
+    };
+  }
+
+  factory DailyLogData.fromMap(Map<String, dynamic> map) {
+    return DailyLogData(
+      id: map['id']?.toString() ?? '',
+      entryDate: map['entry_date']?.toString() ?? '',
+      wakeUpTime: map['wake_up_time']?.toString() ?? '04:00:00',
+      bedTime: map['bed_time']?.toString() ?? '21:45:00',
+      chantingRounds: (map['chanting_rounds'] as num?)?.toInt() ?? 0,
+      spBookReadingMinutes: (map['sp_book_reading_minutes'] as num?)?.toInt() ?? 0,
+      spLectureMinutes: (map['sp_lecture_hearing_minutes'] as num?)?.toInt() ?? 0,
+      otherHearingMinutes: (map['other_hearing_minutes'] as num?)?.toInt() ?? 0,
+      shlokasMemorized: (map['shlokas_memorized'] as num?)?.toInt() ?? 0,
+      calculatedScore: (map['calculated_score'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+class RankingItem {
+  final int rank;
+  final String userId;
+  final String devoteeName;
+  final String preacherTitle;
+  final double totalSP;
+  final int totalRounds;
+  final bool isCurrentUser;
+
+  RankingItem({
+    required this.rank,
+    required this.userId,
+    required this.devoteeName,
+    required this.preacherTitle,
+    required this.totalSP,
+    required this.totalRounds,
+    required this.isCurrentUser,
+  });
+
+  factory RankingItem.fromMap(Map<String, dynamic> map) {
+    return RankingItem(
+      rank: (map['rank'] as num?)?.toInt() ?? 0,
+      userId: map['user_id']?.toString() ?? '',
+      devoteeName: map['devotee_name']?.toString() ?? 'Devotee',
+      preacherTitle: map['preacher_title']?.toString() ?? '',
+      totalSP: (map['total_sp'] as num?)?.toDouble() ?? 0.0,
+      totalRounds: (map['total_rounds'] as num?)?.toInt() ?? 0,
+      isCurrentUser: map['is_current_user'] == true,
+    );
+  }
+}
+
+class SacredBadge {
+  final String titleEn;
+  final String titleHi;
+  final String descEn;
+  final String descHi;
+  final String icon;
+  final bool isUnlocked;
+
+  const SacredBadge({
+    required this.titleEn,
+    required this.titleHi,
+    required this.descEn,
+    required this.descHi,
+    required this.icon,
+    required this.isUnlocked,
   });
 }
 
-class LeaderboardAggregatedRow {
-  final String userId;
-  final String name;
-  final String preacherSuffix;
-  final String? preacherId;
-  final double totalScore;
-  final double avgScore;
-  final int totalRounds;
-  final int entriesCount;
+// Global Language Controller
+final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
-  LeaderboardAggregatedRow({
-    required this.userId,
-    required this.name,
-    required this.preacherSuffix,
-    required this.preacherId,
-    required this.totalScore,
-    required this.avgScore,
-    required this.totalRounds,
-    required this.entriesCount,
-  });
+class AppStrings {
+  static String tr(String key) {
+    final isHi = appLanguage.value == 'hi';
+    switch (key) {
+      case 'app_title': return 'My Sadhna';
+      case 'journey_title': return isHi ? 'मेरी साधना यात्रा' : 'My Sadhna Journey';
+      case 'sukriti_points': return isHi ? 'सुकृति अंक (SP)' : 'Sukriti Points (SP)';
+      case 'accumulated_sp': return isHi ? 'कुल अर्जित सुकृति अंक' : 'ACCUMULATED SUKRITI POINTS';
+      case 'today_offered': return isHi ? 'आज की साधना अर्पित की गई' : "Today's Sadhana Offered";
+      case 'today_pending': return isHi ? 'आज की साधना शेष है' : "Today's Sadhana Pending";
+      case 'log_before_midnight': return isHi ? 'मध्यरात्रि से पूर्व समर्पण करें' : 'Log before midnight to earn Sukriti Points';
+      case 'submit': return isHi ? 'समर्पण करें' : 'Submit';
+      case 'edit_log': return isHi ? 'संशोधन करें' : 'Edit Log';
+      case 'japa_rounds': return isHi ? 'जप माला संख्या' : 'Total Japa Rounds';
+      case 'active_streak': return isHi ? 'निरंतर साधना' : 'Active Streak';
+      case 'sacred_badges': return isHi ? 'साधना उपलब्धियां एवं बैज' : 'Sacred Milestones & Badges';
+      case 'export_pdf': return isHi ? 'मासिक साधना पत्रक (PDF)' : 'Monthly Sadhana Card (PDF)';
+      case 'recent_offerings': return isHi ? 'हालिया समर्पण इतिहास' : 'Recent Offerings';
+      case 'record_sadhana': return isHi ? 'दैनिक साधना दर्ज करें' : 'Record Daily Sadhana';
+      case 'top_rankings': return isHi ? 'शीर्ष साधक तालिका' : 'Top Rankings';
+      case 'weekly_top': return isHi ? 'साप्ताहिक शीर्ष 10' : 'Weekly Top 10';
+      case 'monthly_top': return isHi ? 'मासिक शीर्ष 10' : 'Monthly Top 10';
+      case 'your_standing': return isHi ? 'आपकी वर्तमान स्थिति' : 'YOUR CURRENT STANDING';
+      case 'wake_time': return isHi ? 'जागरण समय' : 'Wake-up Time';
+      case 'bed_time': return isHi ? 'शयन समय' : 'Bedtime';
+      case 'sp_reading': return isHi ? 'प्रभुपाद ग्रंथ अध्ययन' : 'SP Book Reading';
+      case 'sp_hearing': return isHi ? 'प्रभुपाद प्रवचन श्रवण' : 'SP Lecture Hearing';
+      case 'other_hearing': return isHi ? 'अन्य आध्यात्मिक श्रवण / कीर्तन' : 'Other Spiritual Hearing';
+      case 'shlokas': return isHi ? 'कंठस्थ किए गए श्लोक' : 'Shlokas Memorized Today';
+      case 'profile': return isHi ? 'प्रोफ़ाइल' : 'Profile';
+      case 'standings': return isHi ? 'स्थान' : 'Standings';
+      case 'home': return isHi ? 'मुख्य पृष्ठ' : 'Home';
+      case 'weekly_analytics': return isHi ? '7-दिवसीय साधना विश्लेषण' : '7-Day Consistency Analytics';
+      case 'calendar_heatmap': return isHi ? 'मासिक साधना कैलेंडर' : 'Monthly Sadhana Heatmap';
+      case 'counselor_guidance': return isHi ? 'काउंसलर मार्गदर्शन एवं आशीर्वाद' : 'Counselor Guidance & Blessings';
+      case 'register_tab': return isHi ? 'पंजीकरण' : 'Register';
+      case 'signin_tab': return isHi ? 'लॉग इन' : 'Sign In';
+      case 'email_label': return isHi ? 'ईमेल पता' : 'Email Address';
+      case 'password_label': return isHi ? 'पासवर्ड' : 'Password';
+      case 'forgot_password': return isHi ? 'पासवर्ड भूल गए?' : 'Forgot Password?';
+      case 'name_label': return isHi ? 'पूरा / दीक्षित नाम' : 'Full / Initiated Name';
+      case 'phone_label': return isHi ? 'व्हाट्सएप फोन नंबर' : 'WhatsApp Phone Number';
+      case 'create_password_label': return isHi ? 'पासवर्ड बनाएं (6+ अक्षर)' : 'Create Password (6+ chars)';
+      case 'remember_password_tip': return isHi ? '💡 टिप: कृपया अपना पासवर्ड सुरक्षित रखें या कहीं नोट कर लें।' : '💡 Tip: Please remember or write down your password safely.';
+      case 'profession_label': return isHi ? 'व्यवसाय / पेशा' : 'Profession';
+      case 'education_label': return isHi ? 'योग्यता / शिक्षा' : 'Qualification';
+      case 'address_label': return isHi ? 'शहर / पता' : 'City / Address';
+      case 'assigned_preacher': return isHi ? 'निर्धारित प्रचारक / काउंसलर' : 'Assigned Preacher';
+      case 'next_step': return isHi ? 'अगला कदम' : 'Next Step';
+      case 'complete_registration': return isHi ? 'पंजीकरण पूर्ण करें' : 'Complete Registration';
+      case 'back_step': return isHi ? 'पिछले चरण पर वापस जाएं' : 'Back to previous step';
+      default: return key;
+    }
+  }
 }
 
 // ============================================================================
-// 2. ENTRY POINT & THEME
+// 2. ENTRY POINT & THEME CONSTANTS
 // ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -159,14 +293,16 @@ final supabase = Supabase.instance.client;
 
 class AppColors {
   static const Color saffronPrimary = Color(0xFFFF9933);
-  static const Color saffronDark = Color(0xFFCC5500);
-  static const Color goldAccent = Color(0xFFFFD700);
-  static const Color creamBg = Color(0xFFFCF9F2);
+  static const Color saffronDark = Color(0xFFC04B00);
+  static const Color goldAccent = Color(0xFFD97706);
+  static const Color tulsiGreen = Color(0xFF1B4332);
+  static const Color tulsiSoft = Color(0xFF2D6A4F);
+  static const Color creamBg = Color(0xFFFAF9F6);
   static const Color cardBg = Colors.white;
-  static const Color textDark = Color(0xFF2C2523);
-  static const Color textMuted = Color(0xFF7A6E65);
-  static const Color sacredRed = Color(0xFFB71C1C);
-  static const Color borderSubtle = Color(0xFFE8DFD8);
+  static const Color textDark = Color(0xFF1F1A17);
+  static const Color textMuted = Color(0xFF6B5E55);
+  static const Color sacredRed = Color(0xFF991B1B);
+  static const Color borderSubtle = Color(0xFFE2D9D0);
 }
 
 class MySadhnaApp extends StatelessWidget {
@@ -174,31 +310,36 @@ class MySadhnaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'My Sadhna',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: AppColors.creamBg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.saffronPrimary,
-          primary: AppColors.saffronPrimary,
-          secondary: AppColors.saffronDark,
-          surface: AppColors.cardBg,
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: AppColors.creamBg,
-          elevation: 0,
-          centerTitle: true,
-          titleTextStyle: GoogleFonts.outfit(
-            color: AppColors.textDark,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+    return ValueListenableBuilder<String>(
+      valueListenable: appLanguage,
+      builder: (context, lang, _) {
+        return MaterialApp(
+          title: 'My Sadhna',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            scaffoldBackgroundColor: AppColors.creamBg,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.saffronPrimary,
+              primary: AppColors.saffronPrimary,
+              secondary: AppColors.saffronDark,
+              surface: AppColors.cardBg,
+            ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: AppColors.creamBg,
+              elevation: 0,
+              centerTitle: true,
+              titleTextStyle: GoogleFonts.outfit(
+                color: AppColors.textDark,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+              iconTheme: const IconThemeData(color: AppColors.textDark),
+            ),
           ),
-          iconTheme: const IconThemeData(color: AppColors.textDark),
-        ),
-      ),
-      home: const AuthGate(),
+          home: const AuthGate(),
+        );
+      },
     );
   }
 }
@@ -257,93 +398,6 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   @override
-  void initState() {
-    super.initState();
-    supabase.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.passwordRecovery) {
-        _showUpdatePasswordDialog();
-      }
-    });
-  }
-
-  void _showUpdatePasswordDialog() {
-    final newPasswordController = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Set New Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter your new password below (at least 6 characters):',
-                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'New Password',
-                  prefixIcon: Icon(Icons.lock_outline, color: AppColors.saffronDark),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.saffronDark,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () async {
-                final newPass = newPasswordController.text.trim();
-                if (newPass.length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: AppColors.sacredRed,
-                      content: Text('Password must be at least 6 characters long.'),
-                    ),
-                  );
-                  return;
-                }
-                try {
-                  await supabase.auth.updateUser(
-                    UserAttributes(password: newPass),
-                  );
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Colors.green,
-                        content: Text('Password updated successfully!'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.sacredRed,
-                        content: Text(e.toString()),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save New Password'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
@@ -359,7 +413,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // ============================================================================
-// 5. ONBOARDING & REGISTRATION (With Enter-to-Next & OTP Verification)
+// 5. ONBOARDING & REGISTRATION (Password Eye, Tip & Language Switcher)
 // ============================================================================
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -375,6 +429,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentStep = 0;
   bool _isLoginMode = false;
   bool _isLoading = false;
+
+  bool _obscureLoginPassword = true;
+  bool _obscureRegisterPassword = true;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -412,263 +469,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (_) {}
   }
 
-  void _showForgotPasswordDialog() {
-    final resetEmailCtrl = TextEditingController(text: _emailController.text.trim());
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Reset Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter your registered email address. A password recovery link will be sent to your inbox.',
-                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: resetEmailCtrl,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Email Address',
-                  prefixIcon: Icon(Icons.email_outlined, color: AppColors.saffronDark),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.saffronDark,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () async {
-                final email = resetEmailCtrl.text.trim();
-                if (email.isEmpty) return;
-                Navigator.pop(ctx);
-                try {
-                  await supabase.auth.resetPasswordForEmail(email);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Colors.green,
-                        content: Text('Password reset link sent! Check your email.'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.sacredRed,
-                        content: Text(e.toString()),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Send Reset Link'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showOtpVerificationDialog(String email, String password) {
-  final otpController = TextEditingController();
-  bool isVerifying = false;
-  bool isResending = false;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (context, setOtpState) {
-          return AlertDialog(
-            title: const Text('Verify Email OTP'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'We sent a 6-digit verification code to $email. Enter it below to activate your account.',
-                  style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: otpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: '6-Digit OTP',
-                    prefixIcon: Icon(Icons.security, color: AppColors.saffronDark),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: isResending
-                        ? null
-                        : () async {
-                            setOtpState(() => isResending = true);
-                            try {
-                              await supabase.auth.resend(
-                                type: OtpType.signup,
-                                email: email,
-                              );
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Colors.green,
-                                    content: Text('A fresh OTP has been sent to your email.'),
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    backgroundColor: AppColors.sacredRed,
-                                    content: Text('Could not resend OTP: ${e.toString()}'),
-                                  ),
-                                );
-                              }
-                            } finally {
-                              setOtpState(() => isResending = false);
-                            }
-                          },
-                    child: isResending
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Resend Code', style: TextStyle(color: AppColors.saffronDark, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isVerifying ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.saffronDark,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: isVerifying
-                    ? null
-                    : () async {
-                        final token = otpController.text.trim();
-                        if (token.length < 6) return;
-                        setOtpState(() => isVerifying = true);
-                        try {
-                          final res = await supabase.auth.verifyOTP(
-                            email: email,
-                            token: token,
-                            type: OtpType.signup,
-                          );
-
-                          final userId = res.user?.id ?? supabase.auth.currentUser?.id;
-                          if (userId != null) {
-                            await supabase.from('profiles').upsert({
-                              'id': userId,
-                              'role': 'counselee',
-                              'preacher_id': _selectedPreacherId,
-                              'full_name': _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'Devotee',
-                              'email': email,
-                              'phone_number': _phoneController.text.trim(),
-                              'gender': _gender,
-                              'age': _age,
-                              'profession': _professionController.text.trim(),
-                              'education': _educationController.text.trim(),
-                              'address': _addressController.text.trim(),
-                              'hide_name_on_leaderboard': false,
-                              'is_approved': true,
-                            });
-                          }
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        } catch (e) {
-                          setOtpState(() => isVerifying = false);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: AppColors.sacredRed,
-                                content: Text('Verification failed: ${e.toString()}'),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                child: isVerifying
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Verify & Complete'),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
-
-  String? _validateRequired(String? val, String fieldName) {
-    if (val == null || val.trim().isEmpty) return '$fieldName is required';
-    return null;
-  }
-
-  String? _validateEmail(String? val) {
-    if (val == null || val.trim().isEmpty) return 'Email is required';
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(val.trim())) return 'Enter a valid email';
-    return null;
-  }
-
-  String? _validatePhone(String? val) {
-    if (val == null || val.trim().isEmpty) return 'Phone number is required';
-    if (val.replaceAll(RegExp(r'[^0-9]'), '').length < 10) return 'Enter at least 10 digits';
-    return null;
-  }
-
-  String? _validatePassword(String? val) {
-    if (val == null || val.trim().isEmpty) return 'Password is required';
-    if (val.trim().length < 6) return 'Password must be at least 6 characters';
-    return null;
-  }
-
   Future<void> _handleAuth() async {
-  setState(() => _isLoading = true);
-  final email = _emailController.text.trim();
-  final password = _passwordController.text.trim();
+    setState(() => _isLoading = true);
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-  try {
-    if (_isLoginMode) {
-      await supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-    } else {
-      if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
-
-      final authRes = await supabase.auth.signUp(
-        email: email,
-        password: password,
-      );
-
-      if (authRes.session == null) {
-        _showOtpVerificationDialog(email, password);
+    try {
+      if (_isLoginMode) {
+        await supabase.auth.signInWithPassword(email: email, password: password);
       } else {
+        if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
+
+        final authRes = await supabase.auth.signUp(email: email, password: password);
         final userId = authRes.user?.id;
         if (userId != null) {
-          await supabase.from('profiles').insert({
+          await supabase.from('profiles').upsert({
             'id': userId,
             'role': 'counselee',
             'preacher_id': _selectedPreacherId,
@@ -685,48 +500,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           });
         }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    final errStr = e.toString().toLowerCase();
-
-    // If unconfirmed or already registered without confirmation, auto-trigger OTP recovery
-    if (errStr.contains('email not confirmed') || 
-        errStr.contains('already registered') || 
-        errStr.contains('user already exists')) {
-      try {
-        await supabase.auth.resend(type: OtpType.signup, email: email);
-        if (mounted) {
-          _showOtpVerificationDialog(email, password);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.orange,
-              content: Text('Account pending verification. A fresh OTP has been sent.'),
-            ),
-          );
-        }
-        return;
-      } catch (_) {}
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
-      );
-    }
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 700;
+    final isHi = appLanguage.value == 'hi';
 
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Container(
             constraints: BoxConstraints(maxWidth: isDesktop ? 480 : size.width),
             decoration: BoxDecoration(
@@ -740,10 +534,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Top Language Switcher Bar on Login/Register Screen
+                Align(
+                  alignment: Alignment.topRight,
+                  child: ActionChip(
+                    backgroundColor: AppColors.creamBg,
+                    side: const BorderSide(color: AppColors.borderSubtle),
+                    avatar: const Icon(Icons.language, size: 16, color: AppColors.saffronDark),
+                    label: Text(
+                      isHi ? 'EN' : 'हिन्दी',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      appLanguage.value = isHi ? 'en' : 'hi';
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
                 const MSMonogramLogo(size: 64).animate().scale(duration: 400.ms),
                 const SizedBox(height: 16),
                 Text('My Sadhna', style: GoogleFonts.cinzel(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                Text('In Service of ISKCON', style: GoogleFonts.outfit(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
+                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: GoogleFonts.outfit(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
                 const SizedBox(height: 24),
                 Container(
                   decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
@@ -756,7 +568,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(color: !_isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text('Register', style: TextStyle(fontWeight: FontWeight.bold, color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text(AppStrings.tr('register_tab'), style: TextStyle(fontWeight: FontWeight.bold, color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -767,7 +579,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(color: _isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text('Sign In', style: TextStyle(fontWeight: FontWeight.bold, color: _isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text(AppStrings.tr('signin_tab'), style: TextStyle(fontWeight: FontWeight.bold, color: _isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -776,77 +588,83 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 const SizedBox(height: 24),
                 if (_isLoginMode) ...[
-                  _buildInput(
+                  TextFormField(
                     controller: _emailController,
-                    label: 'Email Address',
-                    icon: Icons.email_outlined,
-                    validator: _validateEmail,
-                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: AppStrings.tr('email_label'),
+                      prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  _buildInput(
+                  TextFormField(
                     controller: _passwordController,
-                    label: 'Password',
-                    icon: Icons.lock_outline,
-                    validator: _validatePassword,
-                    obscure: true,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleAuth(),
-                  ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _showForgotPasswordDialog,
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(color: AppColors.saffronDark, fontWeight: FontWeight.w600),
+                    obscureText: _obscureLoginPassword,
+                    decoration: InputDecoration(
+                      labelText: AppStrings.tr('password_label'),
+                      prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureLoginPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
+                        onPressed: () => setState(() => _obscureLoginPassword = !_obscureLoginPassword),
                       ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                     ),
+                    onFieldSubmitted: (_) => _handleAuth(),
                   ),
                 ] else ...[
                   if (_currentStep == 0)
                     Form(
                       key: _formKeyStep0,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildInput(
+                          TextFormField(
                             controller: _nameController,
-                            label: 'Full / Initiated Name',
-                            icon: Icons.person_outline,
-                            validator: (v) => _validateRequired(v, 'Name'),
-                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.tr('name_label'),
+                              prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          _buildInput(
+                          TextFormField(
                             controller: _phoneController,
-                            label: 'Phone / WhatsApp',
-                            icon: Icons.phone_outlined,
-                            validator: _validatePhone,
-                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.tr('phone_label'),
+                              prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          _buildInput(
+                          TextFormField(
                             controller: _emailController,
-                            label: 'Email Address',
-                            icon: Icons.email_outlined,
-                            validator: _validateEmail,
-                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.tr('email_label'),
+                              prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          _buildInput(
+                          TextFormField(
                             controller: _passwordController,
-                            label: 'Create Password (6+ chars)',
-                            icon: Icons.lock_outline,
-                            validator: _validatePassword,
-                            obscure: true,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) {
-                              if (_formKeyStep0.currentState?.validate() ?? false) {
-                                setState(() => _currentStep++);
-                              }
-                            },
+                            obscureText: _obscureRegisterPassword,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.tr('create_password_label'),
+                              prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
+                                onPressed: () => setState(() => _obscureRegisterPassword = !_obscureRegisterPassword),
+                              ),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              AppStrings.tr('remember_password_tip'),
+                              style: const TextStyle(fontSize: 11, color: AppColors.saffronDark, fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ],
                       ),
@@ -854,36 +672,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   else if (_currentStep == 1)
                     Form(
                       key: _formKeyStep1,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       child: Column(
                         children: [
-                          _buildInput(
+                          TextFormField(
                             controller: _professionController,
-                            label: 'Profession',
-                            icon: Icons.work_outline,
-                            validator: (v) => _validateRequired(v, 'Profession'),
-                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(labelText: AppStrings.tr('profession_label'), prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                           ),
                           const SizedBox(height: 14),
-                          _buildInput(
+                          TextFormField(
                             controller: _educationController,
-                            label: 'Qualification',
-                            icon: Icons.school,
-                            validator: (v) => _validateRequired(v, 'Education'),
-                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(labelText: AppStrings.tr('education_label'), prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                           ),
                           const SizedBox(height: 14),
-                          _buildInput(
+                          TextFormField(
                             controller: _addressController,
-                            label: 'Address / City',
-                            icon: Icons.location_on_outlined,
-                            validator: (v) => _validateRequired(v, 'Address'),
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) {
-                              if (_formKeyStep1.currentState?.validate() ?? false) {
-                                setState(() => _currentStep++);
-                              }
-                            },
+                            decoration: InputDecoration(labelText: AppStrings.tr('address_label'), prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                           ),
                         ],
                       ),
@@ -892,7 +695,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     DropdownButtonFormField<String>(
                       initialValue: _selectedPreacherId,
                       decoration: InputDecoration(
-                        labelText: 'Assigned Preacher',
+                        labelText: AppStrings.tr('assigned_preacher'),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                         prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark),
                       ),
@@ -905,31 +708,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.saffronPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            if (_isLoginMode) {
-                              _handleAuth();
-                            } else {
-                              if (_currentStep == 0 && (_formKeyStep0.currentState?.validate() ?? false)) {
-                                setState(() => _currentStep++);
-                              } else if (_currentStep == 1 && (_formKeyStep1.currentState?.validate() ?? false)) {
-                                setState(() => _currentStep++);
-                              } else if (_currentStep == 2) {
-                                _handleAuth();
-                              }
-                            }
-                          },
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    onPressed: _isLoading ? null : () {
+                      if (_isLoginMode) {
+                        _handleAuth();
+                      } else {
+                        if (_currentStep < 2) {
+                          setState(() => _currentStep++);
+                        } else {
+                          _handleAuth();
+                        }
+                      }
+                    },
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
                             _isLoginMode
-                                ? 'Sign In'
-                                : (_currentStep < 2 ? 'Next Step' : 'Complete Registration'),
+                                ? AppStrings.tr('signin_tab')
+                                : (_currentStep < 2 ? AppStrings.tr('next_step') : AppStrings.tr('complete_registration')),
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                   ),
@@ -937,7 +733,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 if (!_isLoginMode && _currentStep > 0)
                   TextButton(
                     onPressed: () => setState(() => _currentStep--),
-                    child: const Text('Back to previous step', style: TextStyle(color: AppColors.textMuted)),
+                    child: Text(AppStrings.tr('back_step'), style: const TextStyle(color: AppColors.textMuted)),
                   ),
               ],
             ),
@@ -946,34 +742,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
-
-  Widget _buildInput({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required String? Function(String?) validator,
-    bool obscure = false,
-    TextInputAction textInputAction = TextInputAction.next,
-    void Function(String)? onFieldSubmitted,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      validator: validator,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onFieldSubmitted,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppColors.saffronDark),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-    );
-  }
 }
 
 // ============================================================================
-// 6. MAIN NAVIGATION SCAFFOLD (Role-Aware: Super Admin, Preacher, Counselee)
+// 6. MAIN NAVIGATION SCAFFOLD
 // ============================================================================
 class MainNavigationScaffold extends StatefulWidget {
   const MainNavigationScaffold({super.key});
@@ -1026,10 +798,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(),
         ProfileDashboardScreen(),
       ];
-      destinations = const [
-        NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin Console'),
-        NavigationDestination(icon: Icon(Icons.leaderboard_outlined), selectedIcon: Icon(Icons.leaderboard, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+      destinations = [
+        NavigationDestination(icon: const Icon(Icons.admin_panel_settings_outlined), selectedIcon: const Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin'),
+        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
+        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
       ];
     } else if (isPreacher) {
       screens = const [
@@ -1037,10 +809,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(),
         ProfileDashboardScreen(),
       ];
-      destinations = const [
-        NavigationDestination(icon: Icon(Icons.temple_hindu_outlined), selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
-        NavigationDestination(icon: Icon(Icons.leaderboard_outlined), selectedIcon: Icon(Icons.leaderboard, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+      destinations = [
+        NavigationDestination(icon: const Icon(Icons.temple_hindu_outlined), selectedIcon: const Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
+        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
+        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
       ];
     } else {
       screens = const [
@@ -1048,10 +820,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(),
         ProfileDashboardScreen(),
       ];
-      destinations = const [
-        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: AppColors.saffronDark), label: 'Home Dashboard'),
-        NavigationDestination(icon: Icon(Icons.leaderboard_outlined), selectedIcon: Icon(Icons.leaderboard, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+      destinations = [
+        NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home, color: AppColors.saffronDark), label: AppStrings.tr('home')),
+        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
+        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
       ];
     }
 
@@ -1068,7 +840,7 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
 }
 
 // ============================================================================
-// 7. DEVOTEE SELF DASHBOARD
+// 7. DEVOTEE SELF DASHBOARD (Heatmap Grid, Guidance Note, Responsive Fixes)
 // ============================================================================
 class DevoteeSelfDashboardScreen extends StatefulWidget {
   const DevoteeSelfDashboardScreen({super.key});
@@ -1079,11 +851,14 @@ class DevoteeSelfDashboardScreen extends StatefulWidget {
 
 class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen> {
   late Future<PersonalStats> _statsFuture;
+  String _userName = 'Devotee';
+  bool _isFlushingOffline = false;
 
   @override
   void initState() {
     super.initState();
     _refreshStats();
+    _syncPendingOfflineEntries();
   }
 
   void _refreshStats() {
@@ -1093,17 +868,48 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     });
   }
 
+  Future<void> _syncPendingOfflineEntries() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingRaw = prefs.getStringList('pending_sadhana_queue') ?? [];
+      if (pendingRaw.isEmpty) return;
+
+      setState(() => _isFlushingOffline = true);
+      final List<String> unSynced = [];
+
+      for (final item in pendingRaw) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(item);
+          await supabase.from('sadhana_entries').upsert(data, onConflict: 'user_id, entry_date');
+        } catch (_) {
+          unSynced.add(item);
+        }
+      }
+
+      await prefs.setStringList('pending_sadhana_queue', unSynced);
+      if (mounted) {
+        setState(() => _isFlushingOffline = false);
+        _refreshStats();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isFlushingOffline = false);
+    }
+  }
+
   Future<PersonalStats> _fetchPersonalStats(String? userId) async {
     if (userId == null) {
-      return const PersonalStats(totalPoints: 0, avgPoints: 0, totalRounds: 0, count: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+      return const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
     }
     try {
+      final userProf = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+      _userName = userProf['full_name']?.toString() ?? 'Devotee';
+
       final res = await supabase
           .from('sadhana_entries')
-          .select('id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, calculated_score')
+          .select('id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score')
           .eq('user_id', userId)
           .order('entry_date', ascending: false)
-          .limit(30);
+          .limit(60);
 
       final List<dynamic> raw = res as List<dynamic>;
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -1123,6 +929,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           spBookReadingMinutes: (r['sp_book_reading_minutes'] as num?)?.toInt() ?? 0,
           spLectureMinutes: (r['sp_lecture_hearing_minutes'] as num?)?.toInt() ?? 0,
           otherHearingMinutes: (r['other_hearing_minutes'] as num?)?.toInt() ?? 0,
+          shlokasMemorized: (r['shlokas_memorized'] as num?)?.toInt() ?? 0,
           calculatedScore: (r['calculated_score'] as num?)?.toDouble() ?? 0.0,
         );
 
@@ -1135,201 +942,597 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         }
       }
 
+      int currentStreak = 0;
+      DateTime checkDate = DateTime.now();
+      if (todayRecord == null) {
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      }
+
+      final datesSet = entries.map((e) => e.entryDate).toSet();
+      while (datesSet.contains(DateFormat('yyyy-MM-dd').format(checkDate))) {
+        currentStreak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      }
+
+      // Check for counselor monthly note
+      String? note;
+      try {
+        final currentMonthStr = DateFormat('yyyy-MM').format(DateTime.now());
+        final noteRes = await supabase.from('counselor_notes').select('note_text').eq('devotee_id', userId).eq('month_year', currentMonthStr).maybeSingle();
+        note = noteRes?['note_text']?.toString();
+      } catch (_) {}
+
       return PersonalStats(
-        totalPoints: total,
-        avgPoints: entries.isEmpty ? 0 : total / entries.length,
+        totalSP: total,
+        avgSP: entries.isEmpty ? 0 : total / entries.length,
         totalRounds: rounds,
         count: entries.length,
+        currentStreak: currentStreak,
+        longestStreak: max(currentStreak, entries.length > 5 ? 7 : currentStreak),
         hasLoggedToday: todayRecord != null,
         todayEntry: todayRecord,
         recent: entries,
+        counselorNote: note,
       );
     } catch (_) {
-      return const PersonalStats(totalPoints: 0, avgPoints: 0, totalRounds: 0, count: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+      return const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
     }
+  }
+
+  List<SacredBadge> _evaluateBadges(PersonalStats stats) {
+    int brahmaMuhurtaCount = 0;
+    int totalShlokas = 0;
+    int totalReadingMins = 0;
+
+    for (final e in stats.recent) {
+      try {
+        final parts = e.wakeUpTime.split(':');
+        if (parts.length >= 2) {
+          final hour = int.tryParse(parts[0]) ?? 6;
+          final minute = int.tryParse(parts[1]) ?? 0;
+          if (hour < 4 || (hour == 4 && minute <= 30)) {
+            brahmaMuhurtaCount++;
+          }
+        }
+      } catch (_) {}
+      totalShlokas += e.shlokasMemorized;
+      totalReadingMins += e.spBookReadingMinutes;
+    }
+
+    return [
+      SacredBadge(
+        titleEn: 'Brahma-muhurta Warrior',
+        titleHi: 'ब्रह्म मुहूर्त साधक',
+        descEn: 'Woke up before 4:30 AM for 7+ days',
+        descHi: '7 दिन या अधिक प्रातः 4:30 बजे से पूर्व जागरण',
+        icon: '🌅',
+        isUnlocked: brahmaMuhurtaCount >= 7,
+      ),
+      SacredBadge(
+        titleEn: 'Nishtha Sadhaka',
+        titleHi: 'निष्ठावान साधक',
+        descEn: 'Maintained 7+ days consecutive active sadhana streak',
+        descHi: '7 दिनों तक लगातार नियमित साधना का समर्पण',
+        icon: '🔥',
+        isUnlocked: stats.currentStreak >= 7,
+      ),
+      SacredBadge(
+        titleEn: 'Swadhyaya Ratna',
+        titleHi: 'स्वाध्याय रत्न',
+        descEn: 'Completed 5+ hours of Srila Prabhupada book reading',
+        descHi: 'प्रभुपाद ग्रंथ अध्ययन के 300 मिनट पूर्ण किए',
+        icon: '📖',
+        isUnlocked: totalReadingMins >= 300,
+      ),
+      SacredBadge(
+        titleEn: 'Shloka Smriti',
+        titleHi: 'श्लोक स्मृति',
+        descEn: 'Memorized 3+ sacred verses',
+        descHi: '3 या अधिक पवित्र श्लोक कंठस्थ किए',
+        icon: '📜',
+        isUnlocked: totalShlokas >= 3,
+      ),
+    ];
+  }
+
+  Widget _buildHeatmapGrid(List<DailyLogData> entries) {
+    final now = DateTime.now();
+    final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
+    final monthName = DateFormat('MMMM yyyy').format(now);
+
+    final Map<int, DailyLogData> dayMap = {};
+    for (final e in entries) {
+      try {
+        final parsed = DateTime.parse(e.entryDate);
+        if (parsed.year == now.year && parsed.month == now.month) {
+          dayMap[parsed.day] = e;
+        }
+      } catch (_) {}
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(AppStrings.tr('calendar_heatmap'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark)),
+              Text(monthName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.saffronDark)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: List.generate(daysInMonth, (index) {
+              final dayNum = index + 1;
+              final entry = dayMap[dayNum];
+              final isPast = dayNum <= now.day;
+
+              Color cellColor = Colors.grey.shade100;
+              Color borderCol = AppColors.borderSubtle;
+              if (entry != null) {
+                if (entry.calculatedScore >= 70) {
+                  cellColor = const Color(0xFFD1FAE5);
+                  borderCol = const Color(0xFF10B981);
+                } else {
+                  cellColor = const Color(0xFFFEF3C7);
+                  borderCol = const Color(0xFFF59E0B);
+                }
+              } else if (isPast) {
+                cellColor = const Color(0xFFFEE2E2);
+                borderCol = const Color(0xFFFCA5A5);
+              }
+
+              return Tooltip(
+                message: entry != null ? 'Day $dayNum: ${entry.calculatedScore.toStringAsFixed(1)} SP (${entry.chantingRounds} rds)' : 'Day $dayNum: No log',
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: cellColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderCol, width: 1.2),
+                  ),
+                  child: Text(
+                    '$dayNum',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: entry != null ? AppColors.textDark : Colors.black45,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _legendDot(const Color(0xFFD1FAE5), 'Full (70+ SP)'),
+              const SizedBox(width: 12),
+              _legendDot(const Color(0xFFFEF3C7), 'Partial'),
+              const SizedBox(width: 12),
+              _legendDot(const Color(0xFFFEE2E2), 'Missed'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: Colors.black26))),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+      ],
+    );
+  }
+
+  Future<void> _generatePdfReport(PersonalStats stats) async {
+    final fontBase = await PdfGoogleFonts.outfitRegular();
+    final fontBold = await PdfGoogleFonts.outfitBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: fontBase, bold: fontBold),
+    );
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.all(24),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('MY SADHNA - MONTHLY REPORT', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange900)),
+                        pw.Text('Devotee: $_userName', style: const pw.TextStyle(fontSize: 14)),
+                        pw.Text('Date Generated: ${DateFormat('dd MMM yyyy').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.deepOrange)),
+                      child: pw.Text('${stats.totalSP.toStringAsFixed(0)} SP', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange)),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 16),
+                pw.Divider(),
+                pw.SizedBox(height: 12),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Days Logged: ${stats.count}'),
+                    pw.Text('Total Japa Rounds: ${stats.totalRounds}'),
+                    pw.Text('Active Streak: ${stats.currentStreak} Days'),
+                    pw.Text('Avg SP/Day: ${stats.avgSP.toStringAsFixed(1)}'),
+                  ],
+                ),
+                pw.SizedBox(height: 18),
+                pw.Text('Daily Sadhana Record Breakdown', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.TableHelper.fromTextArray(
+                  headers: ['Date', 'Wake', 'Rounds', 'Read (m)', 'Hear (m)', 'Shlokas', 'SP'],
+                  data: stats.recent.take(15).map((e) => [
+                    e.entryDate,
+                    e.wakeUpTime.length >= 5 ? e.wakeUpTime.substring(0, 5) : e.wakeUpTime,
+                    '${e.chantingRounds}',
+                    '${e.spBookReadingMinutes}',
+                    '${e.spLectureMinutes}',
+                    '${e.shlokasMemorized}',
+                    e.calculatedScore.toStringAsFixed(1),
+                  ]).toList(),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.deepOrange800),
+                  cellAlignment: pw.Alignment.centerLeft,
+                ),
+                if (stats.counselorNote != null && stats.counselorNote!.isNotEmpty) ...[
+                  pw.SizedBox(height: 16),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(color: PdfColors.amber50, border: pw.Border.all(color: PdfColors.amber800)),
+                    child: pw.Text('Counselor Remarks: "${stats.counselorNote}"', style: pw.TextStyle(fontSize: 11, fontStyle: pw.FontStyle.italic, color: PdfColors.amber900)),
+                  ),
+                ],
+                pw.Spacer(),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(children: [pw.Container(width: 150, height: 1, color: PdfColors.grey600), pw.SizedBox(height: 4), pw.Text("Devotee's Signature")]),
+                    pw.Column(children: [pw.Container(width: 150, height: 1, color: PdfColors.grey600), pw.SizedBox(height: 4), pw.Text("Counselor's Blessings")]),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
   @override
   Widget build(BuildContext context) {
+    final isHi = appLanguage.value == 'hi';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Sadhana Journey'),
+        title: Text(AppStrings.tr('journey_title')),
         actions: [
+          ActionChip(
+            backgroundColor: AppColors.creamBg,
+            side: const BorderSide(color: AppColors.borderSubtle),
+            avatar: const Icon(Icons.language, size: 16, color: AppColors.saffronDark),
+            label: Text(
+              isHi ? 'EN' : 'हिन्दी',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark),
+            ),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              appLanguage.value = isHi ? 'en' : 'hi';
+            },
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
         ],
       ),
-      body: FutureBuilder<PersonalStats>(
-        future: _statsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final stats = snapshot.data ?? const PersonalStats(totalPoints: 0, avgPoints: 0, totalRounds: 0, count: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: FutureBuilder<PersonalStats>(
+            future: _statsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+              final badges = _evaluateBadges(stats);
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.saffronPrimary, AppColors.saffronDark],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(color: AppColors.saffronPrimary.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('CUMULATIVE SADHANA SCORE', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.2)),
-                        const SizedBox(height: 4),
-                        Text('${stats.totalPoints.toStringAsFixed(1)} pts',
-                            style: GoogleFonts.outfit(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text('Avg: ${stats.avgPoints.toStringAsFixed(1)} pts / day  •  ${stats.count} Days Tracked', style: const TextStyle(color: Colors.white)),
-                      ],
-                    ),
-                    const MSMonogramLogo(size: 52),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                decoration: BoxDecoration(
-                  color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
-                  border: Border.all(color: stats.hasLoggedToday ? Colors.green.shade300 : AppColors.saffronPrimary.withValues(alpha: 0.5)),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: stats.hasLoggedToday ? Colors.green : AppColors.saffronPrimary,
-                      foregroundColor: Colors.white,
-                      child: Icon(stats.hasLoggedToday ? Icons.check : Icons.edit_calendar),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
+              return ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                children: [
+                  if (stats.counselorNote != null && stats.counselorNote!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.goldAccent, width: 1.5),
+                      ),
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            stats.hasLoggedToday ? "Today's Sadhana Offered" : "Today's Sadhana Pending",
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          Text(
-                            stats.hasLoggedToday
-                                ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} pts • Tap to modify'
-                                : 'Log before 24h window expires',
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                          const Icon(Icons.volunteer_activism, color: AppColors.saffronDark, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(AppStrings.tr('counselor_guidance'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.saffronDark)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '"${stats.counselorNote}"',
+                                  style: const TextStyle(fontSize: 13, height: 1.4, fontStyle: FontStyle.italic, color: AppColors.textDark),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: stats.hasLoggedToday ? Colors.green.shade700 : AppColors.saffronDark,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.saffronPrimary, AppColors.saffronDark],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry),
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(color: AppColors.saffronPrimary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(AppStrings.tr('accumulated_sp'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Text(
+                                  stats.totalSP.toStringAsFixed(0),
+                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                                  child: const Text('SP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day  •  ${stats.count} Days Active', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          ],
+                        ),
+                        const MSMonogramLogo(size: 54),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: (stats.hasLoggedToday == true) ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
+                      border: Border.all(color: (stats.hasLoggedToday == true) ? const Color(0xFF10B981) : AppColors.saffronPrimary),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: (stats.hasLoggedToday == true) ? AppColors.tulsiGreen : AppColors.saffronPrimary,
+                          foregroundColor: Colors.white,
+                          child: Icon((stats.hasLoggedToday == true) ? Icons.check_circle_outline : Icons.edit_calendar),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                (stats.hasLoggedToday == true) ? AppStrings.tr('today_offered') : AppStrings.tr('today_pending'),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                (stats.hasLoggedToday == true)
+                                    ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP • Tap to modify'
+                                    : AppStrings.tr('log_before_midnight'),
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                              ),
+                            ],
                           ),
-                        );
-                        if (result == true) _refreshStats();
-                      },
-                      child: Text(stats.hasLoggedToday ? 'Edit Log' : 'Report Now'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Total Japa Rounds', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            Text('${stats.totalRounds}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                          ],
                         ),
-                      ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: (stats.hasLoggedToday == true) ? AppColors.tulsiGreen : AppColors.saffronDark,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry),
+                              ),
+                            );
+                            if (result == true) _refreshStats();
+                          },
+                          child: Text((stats.hasLoggedToday == true) ? AppStrings.tr('edit_log') : AppStrings.tr('submit')),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Streak & Logs', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            Text('${stats.count} Days', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                          ],
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(AppStrings.tr('japa_rounds'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                                const SizedBox(height: 6),
+                                Text('${stats.totalRounds}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Card(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(AppStrings.tr('active_streak'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                                const SizedBox(height: 6),
+                                Text('🔥 ${stats.currentStreak} Days', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 18),
+                  _buildHeatmapGrid(stats.recent),
+                  const SizedBox(height: 18),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: AppColors.saffronDark),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.saffronDark),
+                    label: Text(AppStrings.tr('export_pdf'), style: const TextStyle(color: AppColors.saffronDark, fontWeight: FontWeight.bold)),
+                    onPressed: () => _generatePdfReport(stats),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(AppStrings.tr('sacred_badges'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: badges.map((b) {
+                      return Container(
+                        width: MediaQuery.of(context).size.width > 750 ? 360 : double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: b.isUnlocked ? const Color(0xFFFFFBEB) : Colors.white,
+                          border: Border.all(
+                            color: b.isUnlocked ? const Color(0xFFD97706) : AppColors.borderSubtle,
+                            width: b.isUnlocked ? 1.5 : 1.0,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(b.icon, style: const TextStyle(fontSize: 28)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isHi ? b.titleHi : b.titleEn,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: b.isUnlocked ? AppColors.textDark : Colors.grey),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isHi ? b.descHi : b.descEn,
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (b.isUnlocked)
+                              const Icon(Icons.verified, color: AppColors.goldAccent, size: 20),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(AppStrings.tr('recent_offerings'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                  const SizedBox(height: 12),
+                  if (stats.recent.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(child: Text(isHi ? 'कोई प्रविष्टि नहीं मिली।' : 'No daily entries recorded yet.')),
+                      ),
+                    )
+                  else
+                    ...stats.recent.map((e) {
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: AppColors.creamBg,
+                            child: Icon(Icons.check_circle, color: AppColors.tulsiGreen),
+                          ),
+                          title: Text(e.entryDate, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Rounds: ${e.chantingRounds} • Reading: ${e.spBookReadingMinutes}m • Hearing: ${e.spLectureMinutes}m • Shlokas: ${e.shlokasMemorized}'),
+                          trailing: Text(
+                            '${e.calculatedScore.toStringAsFixed(1)} SP',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark, fontSize: 15),
+                          ),
+                        ),
+                      );
+                    }),
                 ],
-              ),
-              const SizedBox(height: 24),
-              Text('Recent Sadhana History', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-              const SizedBox(height: 12),
-              if (stats.recent.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text('No daily entries recorded yet. Tap "Report Now" above to begin.')),
-                  ),
-                )
-              else
-                ...stats.recent.map((e) {
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: AppColors.creamBg,
-                        child: Icon(Icons.check_circle, color: Colors.green),
-                      ),
-                      title: Text('Date: ${e.entryDate}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Rounds: ${e.chantingRounds} • Reading: ${e.spBookReadingMinutes}m • Hearing: ${e.spLectureMinutes}m'),
-                      trailing: Text(
-                        '${e.calculatedScore.toStringAsFixed(1)} pts',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark, fontSize: 15),
-                      ),
-                    ),
-                  );
-                }),
-            ],
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 }
 
 // ============================================================================
-// 8. DAILY SADHANA FORM
+// 8. DAILY SADHANA SUBMISSION FORM
 // ============================================================================
 class DailySadhanaEntryScreen extends StatefulWidget {
   final DailyLogData? existingRecord;
@@ -1348,6 +1551,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
   int _spReadingMinutes = 45;
   int _spLectureMinutes = 30;
   int _otherHearingMinutes = 0;
+  int _shlokasMemorized = 0;
   bool _isSaving = false;
 
   @override
@@ -1360,6 +1564,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
       _spReadingMinutes = rec.spBookReadingMinutes;
       _spLectureMinutes = rec.spLectureMinutes;
       _otherHearingMinutes = rec.otherHearingMinutes;
+      _shlokasMemorized = rec.shlokasMemorized;
 
       final wakeParts = rec.wakeUpTime.split(':');
       if (wakeParts.length >= 2) {
@@ -1372,37 +1577,21 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     }
   }
 
-  double _calculateLiveScore() {
-    double wakeScore = 0;
+  double _calculateLiveSP() {
     final wakeMins = _wakeUpTime.hour * 60 + _wakeUpTime.minute;
-    if (wakeMins <= 4 * 60) {
-      wakeScore = 25;
-    } else if (wakeMins <= 4 * 60 + 30) {
-      wakeScore = 20;
-    } else if (wakeMins <= 5 * 60) {
-      wakeScore = 15;
-    } else if (wakeMins <= 5 * 60 + 30) {
-      wakeScore = 10;
-    } else if (wakeMins <= 6 * 60) {
-      wakeScore = 5;
+    double japaSP = 0.0;
+
+    if (_rounds >= 16 && wakeMins <= (4 * 60 + 30)) {
+      japaSP = 100.0;
+    } else {
+      japaSP = min(_rounds * 4.375, 70.0);
     }
 
-    final baseJapa = min(35.0, _rounds * (35.0 / 16.0));
-    final bonusJapa = _rounds > 16 ? min(10.0, (_rounds - 16) * 1.25) : 0.0;
-    final readingScore = min(20.0, (_spReadingMinutes / 45.0) * 20.0);
-    final hearingScore = min(10.0, ((_spLectureMinutes + (_otherHearingMinutes * 0.5)) / 45.0) * 10.0);
+    final readingSP = (_spReadingMinutes / 30.0) * 25.0;
+    final hearingSP = ((_spLectureMinutes + _otherHearingMinutes) / 30.0) * 25.0;
+    final shlokaSP = _shlokasMemorized * 50.0;
 
-    double bedScore = 0;
-    final bedMins = _bedTime.hour * 60 + _bedTime.minute;
-    if (bedMins <= 22 * 60 && bedMins >= 18 * 60) {
-      bedScore = 10;
-    } else if (bedMins <= 22 * 60 + 30 && bedMins >= 18 * 60) {
-      bedScore = 7;
-    } else if (bedMins <= 23 * 60 && bedMins >= 18 * 60) {
-      bedScore = 4;
-    }
-
-    return wakeScore + baseJapa + bonusJapa + readingScore + hearingScore + bedScore;
+    return japaSP + readingSP + hearingSP + shlokaSP;
   }
 
   Future<void> _submitDailySadhana() async {
@@ -1410,34 +1599,41 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final score = _calculateLiveScore();
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    final payload = {
+      'user_id': user.id,
+      'entry_date': dateString,
+      'wake_up_time': '${_wakeUpTime.hour.toString().padLeft(2, '0')}:${_wakeUpTime.minute.toString().padLeft(2, '0')}:00',
+      'bed_time': '${_bedTime.hour.toString().padLeft(2, '0')}:${_bedTime.minute.toString().padLeft(2, '0')}:00',
+      'chanting_rounds': _rounds,
+      'sp_book_reading_minutes': _spReadingMinutes,
+      'sp_lecture_hearing_minutes': _spLectureMinutes,
+      'other_hearing_minutes': _otherHearingMinutes,
+      'shlokas_memorized': _shlokasMemorized,
+      'last_modified_timestamp': DateTime.now().toIso8601String(),
+    };
 
     try {
-      await supabase.from('sadhana_entries').upsert({
-        'user_id': user.id,
-        'entry_date': dateString,
-        'wake_up_time': '${_wakeUpTime.hour.toString().padLeft(2, '0')}:${_wakeUpTime.minute.toString().padLeft(2, '0')}:00',
-        'bed_time': '${_bedTime.hour.toString().padLeft(2, '0')}:${_bedTime.minute.toString().padLeft(2, '0')}:00',
-        'chanting_rounds': _rounds,
-        'sp_book_reading_minutes': _spReadingMinutes,
-        'sp_lecture_hearing_minutes': _spLectureMinutes,
-        'other_hearing_minutes': _otherHearingMinutes,
-        'calculated_score': score,
-        'last_modified_timestamp': DateTime.now().toIso8601String(),
-      }, onConflict: 'user_id, entry_date');
+      await supabase.from('sadhana_entries').upsert(payload, onConflict: 'user_id, entry_date');
 
       if (mounted) {
+        HapticFeedback.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text('Hari Bol! Sadhana offering recorded successfully.')),
+          const SnackBar(backgroundColor: Colors.green, content: Text('Hari Bol! Daily Sadhana offering recorded successfully.')),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getStringList('pending_sadhana_queue') ?? [];
+      pending.add(jsonEncode(payload));
+      await prefs.setStringList('pending_sadhana_queue', pending);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())),
+          const SnackBar(backgroundColor: Colors.orange, content: Text('Offline: Saved locally on device. Will auto-sync when online.')),
         );
+        Navigator.pop(context, true);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1446,12 +1642,10 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final liveScore = _calculateLiveScore();
+    final liveSP = _calculateLiveSP();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.existingRecord != null ? 'Edit Sadhana Record' : 'Record Daily Sadhana'),
-      ),
+      appBar: AppBar(title: Text(widget.existingRecord != null ? 'Edit Sadhana Record' : AppStrings.tr('record_sadhana'))),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 600),
@@ -1470,9 +1664,15 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('OFFERING SCORE PREVIEW', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.2)),
-                        Text('${liveScore.toStringAsFixed(1)} pts',
-                            style: GoogleFonts.outfit(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                        Text(AppStrings.tr('sukriti_points'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(liveSP.toStringAsFixed(1), style: GoogleFonts.outfit(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 6),
+                            const Text('SP', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
                       ],
                     ),
                     const MSMonogramLogo(size: 46),
@@ -1483,19 +1683,12 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
               Card(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: ListTile(
-                  title: const Text('Logging For Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                  title: const Text('Offering For Date', style: TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate)),
                   trailing: SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment(value: 0, label: Text('Today')),
-                      ButtonSegment(value: 1, label: Text('Yesterday')),
-                    ],
+                    segments: const [ButtonSegment(value: 0, label: Text('Today')), ButtonSegment(value: 1, label: Text('Yesterday'))],
                     selected: {DateTime.now().day == _selectedDate.day ? 0 : 1},
-                    onSelectionChanged: (val) {
-                      setState(() {
-                        _selectedDate = DateTime.now().subtract(Duration(days: val.first));
-                      });
-                    },
+                    onSelectionChanged: (val) => setState(() => _selectedDate = DateTime.now().subtract(Duration(days: val.first))),
                   ),
                 ),
               ),
@@ -1503,10 +1696,11 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _timePickerCard(
-                      label: 'Wake-up Time',
+                    child: _timeCard(
+                      label: AppStrings.tr('wake_time'),
                       time: _wakeUpTime,
                       icon: Icons.wb_sunny_outlined,
+                      subtitle: _wakeUpTime.hour < 4 || (_wakeUpTime.hour == 4 && _wakeUpTime.minute <= 30) ? 'Brahma-muhurta' : null,
                       onTap: () async {
                         final picked = await showTimePicker(context: context, initialTime: _wakeUpTime);
                         if (picked != null) setState(() => _wakeUpTime = picked);
@@ -1515,8 +1709,8 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _timePickerCard(
-                      label: 'Bedtime',
+                    child: _timeCard(
+                      label: AppStrings.tr('bed_time'),
                       time: _bedTime,
                       icon: Icons.bedtime_outlined,
                       onTap: () async {
@@ -1528,64 +1722,23 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              _stepperCard(
-                label: 'Japa Meditation Rounds',
-                subtitle: 'Target: 16+ rounds (Bonus points above 16)',
-                value: _rounds,
-                step: 1,
-                min: 0,
-                max: 64,
-                onChanged: (v) => setState(() => _rounds = v),
-              ),
+              _stepperCard('Japa Meditation Rounds', 'Target: 16 rounds (100 SP Mangala bonus)', _rounds, [1, 4, 16], 0, 64, null, (v) => setState(() => _rounds = v)),
               const SizedBox(height: 12),
-              _stepperCard(
-                label: 'SP Book Reading',
-                subtitle: 'Target: 45+ minutes',
-                unit: 'mins',
-                value: _spReadingMinutes,
-                step: 15,
-                min: 0,
-                max: 240,
-                onChanged: (v) => setState(() => _spReadingMinutes = v),
-              ),
+              _stepperCard(AppStrings.tr('sp_reading'), 'Target: 30–45 mins (25 SP per 30m)', _spReadingMinutes, [15, 30, 45, 60], 0, 300, 'mins', (v) => setState(() => _spReadingMinutes = v)),
               const SizedBox(height: 12),
-              _stepperCard(
-                label: 'SP Lecture Hearing',
-                subtitle: 'Target: 45+ minutes',
-                unit: 'mins',
-                value: _spLectureMinutes,
-                step: 15,
-                min: 0,
-                max: 240,
-                onChanged: (v) => setState(() => _spLectureMinutes = v),
-              ),
+              _stepperCard(AppStrings.tr('sp_hearing'), 'Target: 30–45 mins (25 SP per 30m)', _spLectureMinutes, [15, 30, 45, 60], 0, 300, 'mins', (v) => setState(() => _spLectureMinutes = v)),
               const SizedBox(height: 12),
-              _stepperCard(
-                label: 'Other Spiritual Hearing',
-                subtitle: 'Half-weighted marks toward hearing target',
-                unit: 'mins',
-                value: _otherHearingMinutes,
-                step: 15,
-                min: 0,
-                max: 240,
-                onChanged: (v) => setState(() => _otherHearingMinutes = v),
-              ),
+              _stepperCard(AppStrings.tr('other_hearing'), 'Kirtan / Katha (25 SP per 30m)', _otherHearingMinutes, [15, 30, 60], 0, 300, 'mins', (v) => setState(() => _otherHearingMinutes = v)),
+              const SizedBox(height: 12),
+              _stepperCard(AppStrings.tr('shlokas'), '+50 SP earned per memorized verse', _shlokasMemorized, [1, 2], 0, 20, 'shlokas', (v) => setState(() => _shlokasMemorized = v)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.saffronDark,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                   onPressed: _isSaving ? null : _submitDailySadhana,
-                  child: _isSaving
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          widget.existingRecord != null ? 'Update Offering' : 'Submit Daily Offering',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
+                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : AppStrings.tr('submit'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
             ],
@@ -1595,12 +1748,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     );
   }
 
-  Widget _timePickerCard({
-    required String label,
-    required TimeOfDay time,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
+  Widget _timeCard({required String label, required TimeOfDay time, required IconData icon, String? subtitle, required VoidCallback onTap}) {
     final formatStr = '${time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod}:${time.minute.toString().padLeft(2, '0')} ${time.period == DayPeriod.am ? 'AM' : 'PM'}';
     return InkWell(
       onTap: onTap,
@@ -1612,17 +1760,11 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(icon, color: AppColors.saffronDark, size: 20),
-                  const SizedBox(width: 8),
-                  Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                ],
-              ),
+              Row(children: [Icon(icon, color: AppColors.saffronDark, size: 20), const SizedBox(width: 8), Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13))]),
               const SizedBox(height: 8),
-              Text(formatStr, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+              Text(formatStr, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
               const SizedBox(height: 4),
-              const Text('Tap to change', style: TextStyle(color: AppColors.saffronDark, fontSize: 11)),
+              Text(subtitle ?? 'Tap to change', style: const TextStyle(color: AppColors.saffronDark, fontSize: 11, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -1630,52 +1772,51 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     );
   }
 
-  Widget _stepperCard({
-    required String label,
-    required String subtitle,
-    required int value,
-    required int step,
-    required int min,
-    required int max,
-    String? unit,
-    required ValueChanged<int> onChanged,
-  }) {
+  Widget _stepperCard(String label, String subtitle, int currentValue, List<int> pills, int min, int max, String? unit, ValueChanged<int> onChanged) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                ],
-              ),
-            ),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.saffronDark),
-                  onPressed: value > min ? () => onChanged(value - step < min ? min : value - step) : null,
-                ),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)), Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12))])),
                 Container(
-                  constraints: const BoxConstraints(minWidth: 50),
-                  alignment: Alignment.center,
-                  child: Text(
-                    unit != null ? '$value $unit' : '$value',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.saffronDark),
-                  onPressed: value < max ? () => onChanged(value + step > max ? max : value + step) : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderSubtle)),
+                  child: Text(unit != null ? '$currentValue $unit' : '$currentValue', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                 ),
               ],
-            )
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                IconButton(icon: const Icon(Icons.remove_circle_outline, color: AppColors.saffronDark), onPressed: currentValue > min ? () => onChanged(currentValue - 1) : null),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: pills.map((p) {
+                      return ActionChip(
+                        label: Text('+$p'),
+                        backgroundColor: AppColors.creamBg,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                        labelStyle: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark, fontSize: 12),
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          final newVal = currentValue + p;
+                          onChanged(newVal > max ? max : newVal);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.add_circle_outline, color: AppColors.saffronDark), onPressed: currentValue < max ? () => onChanged(currentValue + 1) : null),
+              ],
+            ),
           ],
         ),
       ),
@@ -1684,7 +1825,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
 }
 
 // ============================================================================
-// 9. SUPER ADMIN CONSOLE (With Devotee & Preacher Management)
+// 9. SUPER ADMIN CONSOLE
 // ============================================================================
 class SuperAdminConsoleScreen extends StatefulWidget {
   const SuperAdminConsoleScreen({super.key});
@@ -1695,7 +1836,7 @@ class SuperAdminConsoleScreen extends StatefulWidget {
 
 class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
   late Future<AdminStats> _adminFuture;
-  int _selectedDirectoryTab = 0; // 0: Devotees, 1: Preachers
+  String _searchFilter = '';
 
   @override
   void initState() {
@@ -1741,595 +1882,52 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
         );
       }).toList();
 
-      return AdminStats(
-        devotees: devoteesCount,
-        preachers: preachersCount,
-        entries: entriesCount,
-        devoteesList: dList,
-        preachersList: pList,
-      );
+      return AdminStats(devotees: devoteesCount, preachers: preachersCount, entries: entriesCount, devoteesList: dList, preachersList: pList);
     } catch (_) {
       return const AdminStats(devotees: 0, preachers: 0, entries: 0, devoteesList: [], preachersList: []);
     }
   }
 
-  void _showAddPreacherDialog() {
-    final titleCtrl = TextEditingController();
-    final suffixCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Add New Counsellor / Preacher'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleCtrl,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Display Title (e.g. HG Radheshyam Das)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: suffixCtrl,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: 'Code Suffix (e.g. RSD)', border: OutlineInputBorder()),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-              onPressed: () async {
-                final title = titleCtrl.text.trim();
-                final suffix = suffixCtrl.text.trim();
-                if (title.isEmpty || suffix.isEmpty) return;
-                Navigator.pop(ctx);
-                try {
-                  await supabase.from('preachers').insert({
-                    'display_title': title,
-                    'code_suffix': suffix,
-                    'is_active': true,
-                  });
-                  _refresh();
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
-                  }
-                }
-              },
-              child: const Text('Add Preacher'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showEditPreacherDialog(PreacherItem preacher) {
-    final titleCtrl = TextEditingController(text: preacher.displayTitle);
-    final suffixCtrl = TextEditingController(text: preacher.codeSuffix);
-    bool isActive = preacher.isActive;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Edit Preacher: ${preacher.codeSuffix}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Display Title', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: suffixCtrl,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(labelText: 'Code Suffix', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Active Status'),
-                    subtitle: const Text('Inactive preachers are hidden from registration dropdowns'),
-                    value: isActive,
-                    onChanged: (val) => setDialogState(() => isActive = val),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: AppColors.sacredRed),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete Preacher Record'),
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          title: const Text('Confirm Deletion'),
-                          content: Text('Delete ${preacher.displayTitle}? If counselees are assigned to this preacher, unassign them first.'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.sacredRed, foregroundColor: Colors.white),
-                              onPressed: () => Navigator.pop(c, true),
-                              child: const Text('Delete'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        Navigator.pop(ctx);
-                        try {
-                          await supabase.from('preachers').delete().eq('id', preacher.id);
-                          _refresh();
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
-                          }
-                        }
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await supabase.from('preachers').update({
-                      'display_title': titleCtrl.text.trim(),
-                      'code_suffix': suffixCtrl.text.trim(),
-                      'is_active': isActive,
-                    }).eq('id', preacher.id);
-                    _refresh();
-                  },
-                  child: const Text('Save Changes'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showAddDevoteeDialog(List<PreacherItem> preachers) {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final profCtrl = TextEditingController();
-    final eduCtrl = TextEditingController();
-    final addrCtrl = TextEditingController();
-    String? selectedPreacherId = preachers.isNotEmpty ? preachers.first.id : null;
-    String selectedRole = 'counselee';
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Add New Devotee'),
-              content: SizedBox(
-                width: 480,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(controller: nameCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: emailCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Email Address', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: passwordCtrl, textInputAction: TextInputAction.next, obscureText: true, decoration: const InputDecoration(labelText: 'Initial Password (6+ chars)', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: phoneCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'WhatsApp Phone Number', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: profCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: eduCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Educational Qualification', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      TextField(controller: addrCtrl, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'Residential Address', border: OutlineInputBorder())),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedRole,
-                        decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(value: 'counselee', child: Text('Counselee / Devotee')),
-                          DropdownMenuItem(value: 'preacher', child: Text('Preacher / Counsellor')),
-                          DropdownMenuItem(value: 'super_admin', child: Text('Super Admin')),
-                        ],
-                        onChanged: (v) => setDialogState(() => selectedRole = v ?? selectedRole),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedPreacherId,
-                        decoration: const InputDecoration(labelText: 'Assign Preacher Group', border: OutlineInputBorder()),
-                        items: preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
-                        onChanged: (v) => setDialogState(() => selectedPreacherId = v),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                  onPressed: () async {
-                    final email = emailCtrl.text.trim();
-                    final password = passwordCtrl.text.trim();
-                    if (email.isEmpty || password.length < 6) return;
-                    Navigator.pop(ctx);
-                    try {
-                      final authRes = await supabase.auth.signUp(email: email, password: password);
-                      final uid = authRes.user?.id;
-                      if (uid != null) {
-                        await supabase.from('profiles').upsert({
-                          'id': uid,
-                          'full_name': nameCtrl.text.trim(),
-                          'email': email,
-                          'phone_number': phoneCtrl.text.trim(),
-                          'profession': profCtrl.text.trim(),
-                          'education': eduCtrl.text.trim(),
-                          'address': addrCtrl.text.trim(),
-                          'role': selectedRole,
-                          'preacher_id': selectedPreacherId,
-                          'hide_name_on_leaderboard': false,
-                          'is_approved': true,
-                        });
-                        _refresh();
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
-                      }
-                    }
-                  },
-                  child: const Text('Create Devotee'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
-    String selectedRole = devotee.role;
-    String? selectedPreacherId = devotee.preacherId;
-    bool hideName = devotee.hideName;
-
-    final nameCtrl = TextEditingController(text: devotee.fullName);
-    final emailCtrl = TextEditingController(text: devotee.email);
-    final phoneCtrl = TextEditingController(text: devotee.phoneNumber);
-    final profCtrl = TextEditingController(text: devotee.profession);
-    final eduCtrl = TextEditingController(text: devotee.education);
-    final addrCtrl = TextEditingController(text: devotee.address);
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Admin Edit: ${devotee.fullName}'),
-              content: SizedBox(
-                width: 480,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: nameCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: emailCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: phoneCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'WhatsApp Phone Number', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: profCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'Profession / Occupation', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: eduCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'Educational Qualification', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: addrCtrl,
-                        textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(labelText: 'Residential Address', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedRole,
-                        decoration: const InputDecoration(labelText: 'System Role', border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(value: 'counselee', child: Text('Counselee / Devotee')),
-                          DropdownMenuItem(value: 'preacher', child: Text('Preacher / Counsellor')),
-                          DropdownMenuItem(value: 'super_admin', child: Text('Super Admin')),
-                        ],
-                        onChanged: (v) => setDialogState(() => selectedRole = v ?? selectedRole),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedPreacherId,
-                        decoration: const InputDecoration(labelText: 'Assign Preacher Group', border: OutlineInputBorder()),
-                        items: preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
-                        onChanged: (v) => setDialogState(() => selectedPreacherId = v),
-                      ),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Hide Name on Leaderboards'),
-                        subtitle: const Text('Mask devotee identity as Anonymous'),
-                        value: hideName,
-                        onChanged: (val) => setDialogState(() => hideName = val),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: AppColors.sacredRed),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Delete Devotee Permanently'),
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (c) => AlertDialog(
-                              title: const Text('Confirm Deletion'),
-                              content: Text('Are you sure you want to delete ${devotee.fullName}? All their sadhana logs will be permanently removed.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.sacredRed, foregroundColor: Colors.white),
-                                  onPressed: () => Navigator.pop(c, true),
-                                  child: const Text('Delete Permanently'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            Navigator.pop(ctx);
-                            try {
-                              await supabase.from('profiles').delete().eq('id', devotee.id);
-                              _refresh();
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Delete failed: ${e.toString()}')),
-                                );
-                              }
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    final newEmail = emailCtrl.text.trim();
-
-                    // If email has changed, call database RPC to update auth.users
-                    if (newEmail.isNotEmpty && newEmail != devotee.email) {
-                      try {
-                        await supabase.rpc('admin_update_user_email', params: {
-                          'target_user_id': devotee.id,
-                          'new_email': newEmail,
-                        });
-                      } catch (_) {}
-                    }
-
-                    await supabase.from('profiles').update({
-                      'full_name': nameCtrl.text.trim(),
-                      'email': newEmail,
-                      'phone_number': phoneCtrl.text.trim(),
-                      'profession': profCtrl.text.trim(),
-                      'education': eduCtrl.text.trim(),
-                      'address': addrCtrl.text.trim(),
-                      'role': selectedRole,
-                      'preacher_id': selectedPreacherId,
-                      'hide_name_on_leaderboard': hideName,
-                    }).eq('id', devotee.id);
-
-                    _refresh();
-                  },
-                  child: const Text('Save Changes'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Super Admin Console'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Super Admin Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
       body: FutureBuilder<AdminStats>(
         future: _adminFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           final stats = snapshot.data ?? const AdminStats(devotees: 0, preachers: 0, entries: 0, devoteesList: [], preachersList: []);
+
+          final filteredDevotees = stats.devoteesList.where((d) {
+            if (_searchFilter.isEmpty) return true;
+            final query = _searchFilter.toLowerCase();
+            return d.fullName.toLowerCase().contains(query) || d.email.toLowerCase().contains(query) || d.phoneNumber.contains(query);
+          }).toList();
 
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppColors.textDark, Color(0xFF4A403A)]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('ADMINISTRATION CONTROLS', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.5)),
-                    const SizedBox(height: 6),
-                    Text('Global Platform Oversight', style: GoogleFonts.outfit(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    const Text('Manage devotees, preachers, login credentials, and assigned spiritual circles.',
-                        style: TextStyle(color: Colors.white60, fontSize: 13)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  _statCard('Devotees', '${stats.devotees}', Icons.groups),
-                  const SizedBox(width: 12),
-                  _statCard('Preachers', '${stats.preachers}', Icons.temple_hindu),
-                  const SizedBox(width: 12),
-                  _statCard('Sadhana Logs', '${stats.entries}', Icons.history_edu),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Directory Switcher & Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment(value: 0, label: Text('Devotees')),
-                      ButtonSegment(value: 1, label: Text('Preachers / Counsellors')),
-                    ],
-                    selected: {_selectedDirectoryTab},
-                    onSelectionChanged: (val) => setState(() => _selectedDirectoryTab = val.first),
-                  ),
-                  if (_selectedDirectoryTab == 0)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.person_add, size: 18),
-                      label: const Text('Add Devotee'),
-                      onPressed: () => _showAddDevoteeDialog(stats.preachersList),
-                    )
-                  else
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add Preacher'),
-                      onPressed: _showAddPreacherDialog,
-                    ),
-                ],
+              TextField(
+                decoration: InputDecoration(hintText: 'Search devotees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                onChanged: (val) => setState(() => _searchFilter = val.trim()),
               ),
               const SizedBox(height: 16),
-
-              if (_selectedDirectoryTab == 0) ...[
-                if (stats.devoteesList.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No devotees found.')))
-                else
-                  ...stats.devoteesList.map((d) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: d.role == 'super_admin' ? AppColors.sacredRed : (d.role == 'preacher' ? Colors.deepPurple : AppColors.saffronPrimary),
-                          foregroundColor: Colors.white,
-                          child: Text(d.fullName.isNotEmpty ? d.fullName[0].toUpperCase() : 'D'),
-                        ),
-                        title: Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Preacher: ${d.preacherTitle}'),
-                        isThreeLine: true,
-                        trailing: IconButton(
-                          icon: const Icon(Icons.edit_note, color: AppColors.saffronDark),
-                          onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
-                        ),
-                      ),
-                    );
-                  }),
-              ] else ...[
-                if (stats.preachersList.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No preachers found. Tap "Add Preacher" above.')))
-                else
-                  ...stats.preachersList.map((p) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: p.isActive ? Colors.green : Colors.grey,
-                          foregroundColor: Colors.white,
-                          child: const Icon(Icons.temple_hindu, size: 20),
-                        ),
-                        title: Text(p.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Suffix: ${p.codeSuffix} • Status: ${p.isActive ? "Active" : "Inactive"}'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.edit, color: AppColors.saffronDark),
-                          onPressed: () => _showEditPreacherDialog(p),
-                        ),
-                      ),
-                    );
-                  }),
-              ],
+              ...filteredDevotees.map((d) => Card(
+                child: ListTile(
+                  title: Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Email: ${d.email} • Role: ${d.role} • Preacher: ${d.preacherTitle}'),
+                ),
+              )),
             ],
           );
         },
       ),
     );
   }
-
-  Widget _statCard(String label, String value, IconData icon) {
-    return Expanded(
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: AppColors.saffronDark, size: 24),
-              const SizedBox(height: 8),
-              Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ============================================================================
-// 10. PREACHER CONSOLE (Preacher Login View With Assigned Counselees)
+// 10. PREACHER CONSOLE (Inactivity Alert Badge, Notes & Direct Comms)
 // ============================================================================
 class PreacherConsoleScreen extends StatefulWidget {
   const PreacherConsoleScreen({super.key});
@@ -2342,6 +1940,8 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
   List<DevoteeProfileItem> _counselees = [];
   bool _isLoading = true;
   String? _preacherId;
+  String _search = '';
+  final DateTime _reportMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   @override
   void initState() {
@@ -2360,12 +1960,19 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
       if (_preacherId != null) {
         final res = await supabase
             .from('profiles')
-            .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id')
+            .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, sadhana_entries(entry_date)')
             .eq('preacher_id', _preacherId!)
             .order('full_name', ascending: true);
 
         final list = (res as List<dynamic>).map((e) {
           final m = e as Map<String, dynamic>;
+          final entries = (m['sadhana_entries'] as List<dynamic>?) ?? [];
+          String? lastDate;
+          if (entries.isNotEmpty) {
+            entries.sort((a, b) => (b['entry_date'] ?? '').toString().compareTo((a['entry_date'] ?? '').toString()));
+            lastDate = entries.first['entry_date']?.toString();
+          }
+
           return DevoteeProfileItem(
             id: m['id']?.toString() ?? '',
             fullName: m['full_name']?.toString() ?? 'Devotee',
@@ -2378,6 +1985,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
             role: m['role']?.toString() ?? 'counselee',
             preacherId: m['preacher_id']?.toString(),
             preacherTitle: 'My Group',
+            latestEntryDate: lastDate,
           );
         }).toList();
 
@@ -2391,65 +1999,171 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     }
   }
 
-  void _showAddCounseleeDialog() {
-    if (_preacherId == null) return;
+  int _calculateDaysInactive(String? latestDate) {
+    if (latestDate == null || latestDate.isEmpty) return 999;
+    try {
+      final last = DateTime.parse(latestDate);
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day).difference(DateTime(last.year, last.month, last.day)).inDays;
+    } catch (_) {
+      return 999;
+    }
+  }
 
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
+  void _callDevotee(String rawPhone) async {
+    final cleanPhone = rawPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (cleanPhone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: cleanPhone);
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
 
-    showDialog(
+  void _openWhatsAppBlank(String rawPhone) async {
+    String cleanDigits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanDigits.isEmpty) return;
+    if (cleanDigits.length == 10) cleanDigits = '91$cleanDigits';
+    final uri = Uri.parse('https://wa.me/$cleanDigits');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  void _showCounseleeMonthlyReport(DevoteeProfileItem devotee) {
+    DateTime selectedMonth = DateTime(_reportMonth.year, _reportMonth.month, 1);
+    final noteCtrl = TextEditingController();
+
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Add Counselee to My Circle'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: emailCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Email Address', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: passCtrl, textInputAction: TextInputAction.next, obscureText: true, decoration: const InputDecoration(labelText: 'Initial Password (6+ chars)', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: phoneCtrl, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'WhatsApp Phone Number', border: OutlineInputBorder())),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-              onPressed: () async {
-                final email = emailCtrl.text.trim();
-                final pass = passCtrl.text.trim();
-                if (email.isEmpty || pass.length < 6) return;
-                Navigator.pop(ctx);
-                try {
-                  final authRes = await supabase.auth.signUp(email: email, password: pass);
-                  final uid = authRes.user?.id;
-                  if (uid != null) {
-                    await supabase.from('profiles').upsert({
-                      'id': uid,
-                      'full_name': nameCtrl.text.trim(),
-                      'email': email,
-                      'phone_number': phoneCtrl.text.trim(),
-                      'role': 'counselee',
-                      'preacher_id': _preacherId,
-                      'is_approved': true,
-                      'hide_name_on_leaderboard': false,
-                    });
-                    _fetchCounselees();
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
-                  }
-                }
-              },
-              child: const Text('Register Devotee'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final startStr = DateFormat('yyyy-MM-dd').format(selectedMonth);
+            final nextMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
+            final endStr = DateFormat('yyyy-MM-dd').format(nextMonth.subtract(const Duration(days: 1)));
+            final monthKey = DateFormat('yyyy-MM').format(selectedMonth);
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(devotee.fullName, style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+                            Text('Sadhana Report for ${DateFormat('MMMM yyyy').format(selectedMonth)}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_note, color: AppColors.saffronDark, size: 28),
+                        tooltip: 'Leave Counselor Guidance Note',
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (dCtx) => AlertDialog(
+                              title: Text('Guidance for ${devotee.fullName}'),
+                              content: TextField(
+                                controller: noteCtrl,
+                                maxLines: 4,
+                                decoration: const InputDecoration(hintText: 'Enter encouraging feedback or spiritual guidance for this month...', border: OutlineInputBorder()),
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+                                  onPressed: () async {
+                                    final text = noteCtrl.text.trim();
+                                    if (text.isEmpty) return;
+                                    final user = supabase.auth.currentUser;
+                                    await supabase.from('counselor_notes').upsert({
+                                      'devotee_id': devotee.id,
+                                      'preacher_id': user?.id ?? '',
+                                      'month_year': monthKey,
+                                      'note_text': text,
+                                      'updated_at': DateTime.now().toIso8601String(),
+                                    }, onConflict: 'devotee_id, month_year');
+                                    if (dCtx.mounted) Navigator.pop(dCtx);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text('Guidance note saved for devotee!')));
+                                    }
+                                  },
+                                  child: const Text('Save Note'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  Expanded(
+                    child: FutureBuilder(
+                      future: supabase
+                          .from('sadhana_entries')
+                          .select('entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score')
+                          .eq('user_id', devotee.id)
+                          .gte('entry_date', startStr)
+                          .lte('entry_date', endStr)
+                          .order('entry_date', ascending: true),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                        final List<dynamic> records = (snapshot.data as List<dynamic>?) ?? [];
+                        if (records.isEmpty) return Center(child: Text('No sadhana logs found for ${DateFormat('MMMM yyyy').format(selectedMonth)}.'));
+
+                        double totalSP = 0;
+                        int totalRounds = 0;
+                        for (final r in records) {
+                          totalSP += (r['calculated_score'] as num?)?.toDouble() ?? 0.0;
+                          totalRounds += (r['chanting_rounds'] as num?)?.toInt() ?? 0;
+                        }
+
+                        return Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                children: [
+                                  Text('Days: ${records.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('Rounds: $totalRounds', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                                  Text('SP: ${totalSP.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: ListView.separated(
+                                itemCount: records.length,
+                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                itemBuilder: (context, idx) {
+                                  final rec = records[idx] as Map<String, dynamic>;
+                                  final wake = rec['wake_up_time']?.toString() ?? '';
+                                  final wakeDisplay = wake.length >= 5 ? wake.substring(0, 5) : wake;
+                                  return ListTile(
+                                    title: Text(rec['entry_date']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    subtitle: Text('Wake: $wakeDisplay • Japa: ${rec['chanting_rounds']} rds • Read: ${rec['sp_book_reading_minutes']}m • Hear: ${rec['sp_lecture_hearing_minutes']}m'),
+                                    trailing: Text('${(rec['calculated_score'] as num?)?.toStringAsFixed(1) ?? '0'} SP', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -2457,13 +2171,14 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _counselees.where((c) {
+      if (_search.isEmpty) return true;
+      final q = _search.toLowerCase();
+      return c.fullName.toLowerCase().contains(q) || c.email.toLowerCase().contains(q) || c.phoneNumber.contains(q);
+    }).toList();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Preacher Console'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Preacher Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -2473,30 +2188,57 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('My Counselees (${_counselees.length})', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.person_add, size: 18),
-                      label: const Text('Add Devotee'),
-                      onPressed: _showAddCounseleeDialog,
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (_counselees.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No counselees assigned to your group yet.')))
+                TextField(
+                  decoration: InputDecoration(hintText: 'Search counselees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                  onChanged: (val) => setState(() => _search = val.trim()),
+                ),
+                const SizedBox(height: 14),
+                if (filtered.isEmpty)
+                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No counselees found.')))
                 else
-                  ..._counselees.map((c) {
+                  ...filtered.map((c) {
+                    final daysInactive = _calculateDaysInactive(c.latestEntryDate);
+                    final isInactive = daysInactive >= 3;
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       child: ListTile(
+                        onTap: () => _showCounseleeMonthlyReport(c),
                         leading: CircleAvatar(
-                          backgroundColor: AppColors.saffronPrimary,
+                          backgroundColor: isInactive ? AppColors.sacredRed : AppColors.saffronPrimary,
                           foregroundColor: Colors.white,
                           child: Text(c.fullName.isNotEmpty ? c.fullName[0].toUpperCase() : 'D'),
                         ),
-                        title: Text(c.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Email: ${c.email}\nPhone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "Not provided"}'),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text(c.fullName, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                            if (isInactive) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.sacredRed)),
+                                child: Text(
+                                  daysInactive > 60 ? 'Inactive' : '⚠️ ${daysInactive}d Missed',
+                                  style: const TextStyle(color: AppColors.sacredRed, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "No phone"}\nLatest: ${c.latestEntryDate ?? "No entries yet"}'),
+                        isThreeLine: true,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.call, color: AppColors.tulsiGreen), tooltip: 'Direct Call', onPressed: () => _callDevotee(c.phoneNumber)),
+                            IconButton(icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF25D366)), tooltip: 'WhatsApp Chat', onPressed: () => _openWhatsAppBlank(c.phoneNumber)),
+                            const Icon(Icons.chevron_right, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     );
                   }),
@@ -2507,7 +2249,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
 }
 
 // ============================================================================
-// 11. AGGREGATED LEADERBOARD
+// 11. TOP RANKINGS SCREEN
 // ============================================================================
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -2517,85 +2259,13 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
-  int _tier = 0;
-  String? _currentUserPreacherId;
+  String _periodType = 'weekly';
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchCurrentUserPreacher();
-  }
-
-  Future<void> _fetchCurrentUserPreacher() async {
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        final profile = await supabase.from('profiles').select('preacher_id').eq('id', user.id).single();
-        setState(() {
-          _currentUserPreacherId = profile['preacher_id']?.toString();
-        });
-      } catch (_) {}
-    }
-  }
-
-  Future<List<LeaderboardAggregatedRow>> _fetchAggregatedLeaderboard() async {
+  Future<List<RankingItem>> _fetchTopRankings() async {
     try {
-      final response = await supabase
-          .from('sadhana_entries')
-          .select('user_id, chanting_rounds, calculated_score, profiles(role, full_name, preacher_id, hide_name_on_leaderboard, preachers(code_suffix))');
-
-      final List<dynamic> raw = response as List<dynamic>;
-      final Map<String, LeaderboardAggregatedRow> aggregated = {};
-
-      for (final item in raw) {
-        final map = item as Map<String, dynamic>;
-        final profile = map['profiles'] as Map<String, dynamic>?;
-
-        if (profile?['role'] == 'super_admin') continue;
-
-        final String uId = map['user_id']?.toString() ?? '';
-        final String? preacherId = profile?['preacher_id']?.toString();
-
-        if (_tier == 0 && _currentUserPreacherId != null) {
-          if (preacherId != _currentUserPreacherId) continue;
-        }
-
-        final preacher = profile?['preachers'] as Map<String, dynamic>?;
-        final bool isAnon = profile?['hide_name_on_leaderboard'] == true;
-        final String name = isAnon ? 'Anonymous Devotee' : (profile?['full_name']?.toString() ?? 'Devotee');
-        final String suffix = preacher != null ? ' - ${preacher['code_suffix']}' : '';
-        final double score = (map['calculated_score'] as num?)?.toDouble() ?? 0.0;
-        final int rounds = (map['chanting_rounds'] as num?)?.toInt() ?? 0;
-
-        if (aggregated.containsKey(uId)) {
-          final existing = aggregated[uId]!;
-          aggregated[uId] = LeaderboardAggregatedRow(
-            userId: uId,
-            name: name,
-            preacherSuffix: suffix,
-            preacherId: preacherId,
-            totalScore: existing.totalScore + score,
-            avgScore: (existing.totalScore + score) / (existing.entriesCount + 1),
-            totalRounds: existing.totalRounds + rounds,
-            entriesCount: existing.entriesCount + 1,
-          );
-        } else {
-          aggregated[uId] = LeaderboardAggregatedRow(
-            userId: uId,
-            name: name,
-            preacherSuffix: suffix,
-            preacherId: preacherId,
-            totalScore: score,
-            avgScore: score,
-            totalRounds: rounds,
-            entriesCount: 1,
-          );
-        }
-      }
-
-      final list = aggregated.values.toList();
-      list.sort((a, b) => b.totalScore.compareTo(a.totalScore));
-      return list;
+      final res = await supabase.rpc('get_top_rankings', params: {'p_period_type': _periodType});
+      final List<dynamic> data = res as List<dynamic>;
+      return data.map((e) => RankingItem.fromMap(e as Map<String, dynamic>)).toList();
     } catch (_) {
       return [];
     }
@@ -2604,81 +2274,66 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sadhana Standings')),
+      appBar: AppBar(title: Text(AppStrings.tr('top_rankings'))),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 650),
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(value: 0, label: Text("Preacher's Circle")),
-                    ButtonSegment(value: 1, label: Text('Global Devotees')),
-                  ],
-                  selected: {_tier},
-                  onSelectionChanged: (val) => setState(() => _tier = val.first),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: SegmentedButton<String>(
+                  segments: [ButtonSegment(value: 'weekly', label: Text(AppStrings.tr('weekly_top'))), ButtonSegment(value: 'monthly', label: Text(AppStrings.tr('monthly_top')))],
+                  selected: {_periodType},
+                  onSelectionChanged: (val) => setState(() => _periodType = val.first),
                 ),
               ),
               Expanded(
-                child: FutureBuilder<List<LeaderboardAggregatedRow>>(
-                  future: _fetchAggregatedLeaderboard(),
+                child: FutureBuilder<List<RankingItem>>(
+                  future: _fetchTopRankings(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final list = snapshot.data ?? [];
-                    if (list.isEmpty) {
-                      return Center(
-                        child: Text(
-                          _tier == 0
-                              ? "No devotee records found for your Preacher's group."
-                              : 'No sadhana entries recorded yet globally.',
-                          style: const TextStyle(color: AppColors.textMuted),
+                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                    final rankings = snapshot.data ?? [];
+                    if (rankings.isEmpty) return const Center(child: Text('No sadhana offerings logged yet.', style: TextStyle(color: AppColors.textMuted)));
+
+                    final bool hasPinned = rankings.isNotEmpty && rankings.last.isCurrentUser && rankings.last.rank > 10;
+                    final list = hasPinned ? rankings.sublist(0, rankings.length - 1) : rankings;
+                    final pinnedItem = hasPinned ? rankings.last : null;
+
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            itemCount: list.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = list[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: item.rank == 1 ? AppColors.goldAccent : (item.rank == 2 ? const Color(0xFFC0C0C0) : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
+                                  foregroundColor: item.rank <= 3 ? Colors.white : Colors.black87,
+                                  child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ),
+                                title: Text(item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName, style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold)),
+                                subtitle: Text('Total Rounds: ${item.totalRounds} • ${item.preacherTitle}'),
+                                trailing: Text('${item.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
+                              );
+                            },
+                          ),
                         ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = list[index];
-
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: index == 0
-                                ? AppColors.goldAccent
-                                : (index < 3 ? AppColors.saffronPrimary : Colors.grey.shade200),
-                            foregroundColor: index < 3 ? Colors.white : Colors.black87,
-                            child: Text('${index + 1}'),
+                        if (pinnedItem != null)
+                          Container(
+                            color: const Color(0xFFFFF7ED),
+                            padding: const EdgeInsets.all(12),
+                            child: ListTile(
+                              leading: CircleAvatar(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, child: Text('#${pinnedItem.rank}')),
+                              title: Text('${pinnedItem.devoteeName} (You)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Total Rounds: ${pinnedItem.totalRounds}'),
+                              trailing: Text('${pinnedItem.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
+                            ),
                           ),
-                          title: Text(
-                            '${item.name}${item.preacherSuffix}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          subtitle: Text(
-                            'Total Rounds: ${item.totalRounds} • ${item.entriesCount} Logged Offerings',
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '${item.totalScore.toStringAsFixed(1)} pts',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark, fontSize: 16),
-                              ),
-                              Text(
-                                'Avg: ${item.avgScore.toStringAsFixed(1)}',
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                      ],
                     );
                   },
                 ),
@@ -2692,7 +2347,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 }
 
 // ============================================================================
-// 12. PROFILE & SETTINGS (With Self Email & Data Modification)
+// 12. PROFILE & SETTINGS
 // ============================================================================
 class ProfileDashboardScreen extends StatefulWidget {
   const ProfileDashboardScreen({super.key});
@@ -2715,128 +2370,23 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final res = await supabase
-            .from('profiles')
-            .select('full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, preachers(display_title, code_suffix)')
-            .eq('id', user.id)
-            .single();
-        if (mounted) {
-          setState(() {
-            _profileData = res;
-            _isLoading = false;
-          });
-        }
+        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, preachers(display_title, code_suffix)').eq('id', user.id).single();
+        if (mounted) setState(() { _profileData = res; _isLoading = false; });
         return;
       } catch (_) {}
     }
     if (mounted) setState(() => _isLoading = false);
   }
 
-  void _showEditProfileDialog() {
-    final user = supabase.auth.currentUser;
-    if (user == null || _profileData == null) return;
-
-    final nameCtrl = TextEditingController(text: _profileData!['full_name'] ?? '');
-    final emailCtrl = TextEditingController(text: user.email ?? '');
-    final phoneCtrl = TextEditingController(text: _profileData!['phone_number'] ?? '');
-    final profCtrl = TextEditingController(text: _profileData!['profession'] ?? '');
-    final eduCtrl = TextEditingController(text: _profileData!['education'] ?? '');
-    final addrCtrl = TextEditingController(text: _profileData!['address'] ?? '');
-    bool hideName = _profileData!['hide_name_on_leaderboard'] ?? false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                left: 24,
-                right: 24,
-                top: 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Edit Personal Details', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    TextField(controller: nameCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
-                    const SizedBox(height: 12),
-                    TextField(controller: emailCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Registered Email Address', border: OutlineInputBorder())),
-                    const SizedBox(height: 12),
-                    TextField(controller: phoneCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
-                    const SizedBox(height: 12),
-                    TextField(controller: profCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
-                    const SizedBox(height: 12),
-                    TextField(controller: eduCtrl, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder())),
-                    const SizedBox(height: 12),
-                    TextField(controller: addrCtrl, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'Full Address', border: OutlineInputBorder())),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Hide Name on Leaderboards'),
-                      subtitle: const Text('Shows as "Anonymous Devotee" to others'),
-                      value: hideName,
-                      onChanged: (val) => setSheetState(() => hideName = val),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          final newEmail = emailCtrl.text.trim();
-
-                          if (newEmail.isNotEmpty && newEmail != user.email) {
-                            try {
-                              await supabase.auth.updateUser(UserAttributes(email: newEmail));
-                            } catch (_) {}
-                          }
-
-                          await supabase.from('profiles').update({
-                            'full_name': nameCtrl.text.trim(),
-                            'email': newEmail,
-                            'phone_number': phoneCtrl.text.trim(),
-                            'profession': profCtrl.text.trim(),
-                            'education': eduCtrl.text.trim(),
-                            'address': addrCtrl.text.trim(),
-                            'hide_name_on_leaderboard': hideName,
-                          }).eq('id', user.id);
-
-                          _fetchProfile();
-                        },
-                        child: const Text('Save Changes'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
-
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     final pr = _profileData?['preachers'] as Map<String, dynamic>?;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Profile')),
+      appBar: AppBar(title: Text(AppStrings.tr('profile'))),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 550),
@@ -2845,18 +2395,8 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
             children: [
               const Center(child: MSMonogramLogo(size: 80)),
               const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  _profileData?['full_name'] ?? 'Devotee',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Center(
-                child: Text(
-                  user?.email ?? '',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-                ),
-              ),
+              Center(child: Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+              Center(child: Text(user?.email ?? '', style: const TextStyle(color: AppColors.textMuted, fontSize: 14))),
               const SizedBox(height: 20),
               Card(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2864,42 +2404,23 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _infoRow('Phone', _profileData?['phone_number'] ?? 'Not set'),
+                      _row('Phone', _profileData?['phone_number'] ?? 'Not set'),
                       const Divider(),
-                      _infoRow('Profession', _profileData?['profession'] ?? 'Not set'),
+                      _row('Profession', _profileData?['profession'] ?? 'Not set'),
                       const Divider(),
-                      _infoRow('Qualification', _profileData?['education'] ?? 'Not set'),
+                      _row('Address', _profileData?['address'] ?? 'Not set'),
                       const Divider(),
-                      _infoRow('Address', _profileData?['address'] ?? 'Not set'),
-                      const Divider(),
-                      _infoRow('Preacher', pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None'),
+                      _row('Preacher', pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None'),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.saffronPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: const Icon(Icons.edit),
-                label: const Text('Edit Profile Details', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: _showEditProfileDialog,
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
               OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.sacredRed,
-                  side: const BorderSide(color: AppColors.sacredRed),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                 onPressed: () async => await supabase.auth.signOut(),
                 child: const Text('Sign Out'),
-              )
+              ),
             ],
           ),
         ),
@@ -2907,23 +2428,12 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _row(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark),
-            ),
-          ),
-        ],
+        children: [Text(label, style: const TextStyle(color: AppColors.textMuted)), Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark))],
       ),
     );
   }
