@@ -22,19 +22,24 @@ jobs:
         run: flutter pub get
 
       - name: Build Web Production
-        run: flutter build web --release
+        # --pwa-strategy none prevents aggressive background caching of large assets
+        run: flutter build web --release --pwa-strategy=none
+
+      - name: Copy APK to Build Directory
+        # Copy the APK into build/web AFTER the web build so the service worker ignores it
+        run: |
+          if [ -f web/MySadhna.apk ]; then
+            cp web/MySadhna.apk build/web/MySadhna.apk
+          fi
 
       - name: Deploy to Vercel
         run: |
-          # Clean secrets to strip any accidental quotes or spaces
           CLEAN_TOKEN=$(echo "${{ secrets.VERCEL_TOKEN }}" | tr -d ' "\r\n')
           CLEAN_ORG=$(echo "${{ secrets.VERCEL_ORG_ID }}" | tr -d ' "\r\n')
           CLEAN_PRJ=$(echo "${{ secrets.VERCEL_PROJECT_ID }}" | tr -d ' "\r\n')
 
-          # Link project configuration directly inside the build directory
           mkdir -p build/web/.vercel
           echo "{\"orgId\":\"$CLEAN_ORG\",\"projectId\":\"$CLEAN_PRJ\"}" > build/web/.vercel/project.json
 
-          # Deploy using latest official Vercel CLI
           cd build/web
           npx --yes vercel@latest deploy --prod --token="$CLEAN_TOKEN" --yes
