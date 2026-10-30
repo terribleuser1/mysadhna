@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -258,7 +259,6 @@ class AppStrings {
       case 'signin_tab': return isHi ? 'लॉग इन' : 'Sign In';
       case 'email_label': return isHi ? 'ईमेल पता' : 'Email Address';
       case 'password_label': return isHi ? 'पासवर्ड' : 'Password';
-      case 'forgot_password': return isHi ? 'पासवर्ड भूल गए?' : 'Forgot Password?';
       case 'name_label': return isHi ? 'पूरा / दीक्षित नाम' : 'Full / Initiated Name';
       case 'phone_label': return isHi ? 'व्हाट्सएप फोन नंबर' : 'WhatsApp Phone Number';
       case 'create_password_label': return isHi ? 'पासवर्ड बनाएं (6+ अक्षर)' : 'Create Password (6+ chars)';
@@ -413,7 +413,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // ============================================================================
-// 5. ONBOARDING & REGISTRATION (Password Eye, Tip & Language Switcher)
+// 5. ONBOARDING & REGISTRATION
 // ============================================================================
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -534,7 +534,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Top Language Switcher Bar on Login/Register Screen
                 Align(
                   alignment: Alignment.topRight,
                   child: ActionChip(
@@ -954,7 +953,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         checkDate = checkDate.subtract(const Duration(days: 1));
       }
 
-      // Check for counselor monthly note
       String? note;
       try {
         final currentMonthStr = DateFormat('yyyy-MM').format(DateTime.now());
@@ -2347,7 +2345,157 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 }
 
 // ============================================================================
-// 12. PROFILE & SETTINGS
+// 12. WEB APK DOWNLOAD BANNER (Hidden on native APKs)
+// ============================================================================
+class WebApkDownloadBanner extends StatelessWidget {
+  const WebApkDownloadBanner({super.key});
+
+  void _triggerDownloadAndShowDialog(BuildContext context) async {
+    // Resolve absolute URL using the current browser domain/port
+    final apkUri = Uri.base.resolve('downloads/my_sadhna.apk');
+
+    try {
+      await launchUrl(
+        apkUri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_self', // Triggers browser download without popup blockers
+      );
+    } catch (_) {
+      // Fallback direct launch if browser blocks external app mode
+      await launchUrl(apkUri, webOnlyWindowName: '_blank');
+    }
+
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.check_circle_outline, color: AppColors.tulsiGreen, size: 28),
+              SizedBox(width: 10),
+              Text('Thanks for Downloading!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your download for My Sadhna Android App has started.',
+                style: TextStyle(fontSize: 14, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'How to install:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.saffronDark),
+              ),
+              const SizedBox(height: 8),
+              _buildStepRow('1', 'Open the downloaded my_sadhna.apk file from your notification bar or Downloads folder.'),
+              const SizedBox(height: 6),
+              _buildStepRow('2', 'If prompted by Chrome or Files, tap Settings and allow "Install unknown apps".'),
+              const SizedBox(height: 6),
+              _buildStepRow('3', 'Tap Install to complete setup and start offering your daily sadhana.'),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.saffronDark,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it!'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  static Widget _buildStepRow(String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 9,
+          backgroundColor: AppColors.saffronPrimary.withValues(alpha: 0.2),
+          child: Text(number, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 12, height: 1.35, color: AppColors.textMuted))),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Get the Android App',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textDark),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Install for offline sadhana tracking and instant daily access.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.tulsiGreen,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Download APK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            onPressed: () => _triggerDownloadAndShowDialog(context),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 13. PROFILE & SETTINGS
 // ============================================================================
 class ProfileDashboardScreen extends StatefulWidget {
   const ProfileDashboardScreen({super.key});
@@ -2415,9 +2563,17 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              // Web download card (auto-hides on APK)
+              const WebApkDownloadBanner(),
+              const SizedBox(height: 16),
               OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.sacredRed,
+                  side: const BorderSide(color: AppColors.sacredRed),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
                 onPressed: () async => await supabase.auth.signOut(),
                 child: const Text('Sign Out'),
               ),
