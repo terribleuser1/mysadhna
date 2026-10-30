@@ -483,104 +483,143 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _showOtpVerificationDialog(String email, String password) {
-    final otpController = TextEditingController();
-    bool isVerifying = false;
+  final otpController = TextEditingController();
+  bool isVerifying = false;
+  bool isResending = false;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setOtpState) {
-            return AlertDialog(
-              title: const Text('Verify Email OTP'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'We sent a 6-digit verification code to $email. Please enter it below to complete registration.',
-                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: otpController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      labelText: '6-Digit OTP',
-                      prefixIcon: Icon(Icons.security, color: AppColors.saffronDark),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isVerifying ? null : () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setOtpState) {
+          return AlertDialog(
+            title: const Text('Verify Email OTP'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'We sent a 6-digit verification code to $email. Enter it below to activate your account.',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.saffronDark,
-                    foregroundColor: Colors.white,
+                const SizedBox(height: 16),
+                TextField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: '6-Digit OTP',
+                    prefixIcon: Icon(Icons.security, color: AppColors.saffronDark),
+                    border: OutlineInputBorder(),
                   ),
-                  onPressed: isVerifying
-                      ? null
-                      : () async {
-                          final token = otpController.text.trim();
-                          if (token.length < 6) return;
-                          setOtpState(() => isVerifying = true);
-                          try {
-                            final res = await supabase.auth.verifyOTP(
-                              email: email,
-                              token: token,
-                              type: OtpType.signup,
-                            );
-
-                            final userId = res.user?.id ?? supabase.auth.currentUser?.id;
-                            if (userId != null) {
-                              await supabase.from('profiles').upsert({
-                                'id': userId,
-                                'role': 'counselee',
-                                'preacher_id': _selectedPreacherId,
-                                'full_name': _nameController.text.trim(),
-                                'email': email,
-                                'phone_number': _phoneController.text.trim(),
-                                'gender': _gender,
-                                'age': _age,
-                                'profession': _professionController.text.trim(),
-                                'education': _educationController.text.trim(),
-                                'address': _addressController.text.trim(),
-                                'hide_name_on_leaderboard': false,
-                                'is_approved': true,
-                              });
-                            }
-                            if (ctx.mounted) Navigator.pop(ctx);
-                          } catch (e) {
-                            setOtpState(() => isVerifying = false);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: AppColors.sacredRed,
-                                  content: Text('Verification failed: ${e.toString()}'),
-                                ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: isResending
+                        ? null
+                        : () async {
+                            setOtpState(() => isResending = true);
+                            try {
+                              await supabase.auth.resend(
+                                type: OtpType.signup,
+                                email: email,
                               );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Colors.green,
+                                    content: Text('A fresh OTP has been sent to your email.'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: AppColors.sacredRed,
+                                    content: Text('Could not resend OTP: ${e.toString()}'),
+                                  ),
+                                );
+                              }
+                            } finally {
+                              setOtpState(() => isResending = false);
                             }
-                          }
-                        },
-                  child: isVerifying
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Verify & Complete'),
+                          },
+                    child: isResending
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Resend Code', style: TextStyle(color: AppColors.saffronDark, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
-            );
-          },
-        );
-      },
-    );
-  }
+            ),
+            actions: [
+              TextButton(
+                onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.saffronDark,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final token = otpController.text.trim();
+                        if (token.length < 6) return;
+                        setOtpState(() => isVerifying = true);
+                        try {
+                          final res = await supabase.auth.verifyOTP(
+                            email: email,
+                            token: token,
+                            type: OtpType.signup,
+                          );
+
+                          final userId = res.user?.id ?? supabase.auth.currentUser?.id;
+                          if (userId != null) {
+                            await supabase.from('profiles').upsert({
+                              'id': userId,
+                              'role': 'counselee',
+                              'preacher_id': _selectedPreacherId,
+                              'full_name': _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'Devotee',
+                              'email': email,
+                              'phone_number': _phoneController.text.trim(),
+                              'gender': _gender,
+                              'age': _age,
+                              'profession': _professionController.text.trim(),
+                              'education': _educationController.text.trim(),
+                              'address': _addressController.text.trim(),
+                              'hide_name_on_leaderboard': false,
+                              'is_approved': true,
+                            });
+                          }
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          setOtpState(() => isVerifying = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: AppColors.sacredRed,
+                                content: Text('Verification failed: ${e.toString()}'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isVerifying
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Verify & Complete'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
 
   String? _validateRequired(String? val, String fieldName) {
     if (val == null || val.trim().isEmpty) return '$fieldName is required';
@@ -606,59 +645,78 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _handleAuth() async {
-    setState(() => _isLoading = true);
-    try {
-      if (_isLoginMode) {
-        await supabase.auth.signInWithPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+  setState(() => _isLoading = true);
+  final email = _emailController.text.trim();
+  final password = _passwordController.text.trim();
+
+  try {
+    if (_isLoginMode) {
+      await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+    } else {
+      if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
+
+      final authRes = await supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (authRes.session == null) {
+        _showOtpVerificationDialog(email, password);
       } else {
-        if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
-
-        final email = _emailController.text.trim();
-        final password = _passwordController.text.trim();
-
-        final authRes = await supabase.auth.signUp(
-          email: email,
-          password: password,
-        );
-
-        if (authRes.session == null) {
-          // Email confirmation is required by Supabase: trigger OTP prompt
-          _showOtpVerificationDialog(email, password);
-        } else {
-          // If auto-confirm is enabled in Supabase, create profile row directly
-          final userId = authRes.user?.id;
-          if (userId != null) {
-            await supabase.from('profiles').insert({
-              'id': userId,
-              'role': 'counselee',
-              'preacher_id': _selectedPreacherId,
-              'full_name': _nameController.text.trim(),
-              'email': email,
-              'phone_number': _phoneController.text.trim(),
-              'gender': _gender,
-              'age': _age,
-              'profession': _professionController.text.trim(),
-              'education': _educationController.text.trim(),
-              'address': _addressController.text.trim(),
-              'hide_name_on_leaderboard': false,
-              'is_approved': true,
-            });
-          }
+        final userId = authRes.user?.id;
+        if (userId != null) {
+          await supabase.from('profiles').insert({
+            'id': userId,
+            'role': 'counselee',
+            'preacher_id': _selectedPreacherId,
+            'full_name': _nameController.text.trim(),
+            'email': email,
+            'phone_number': _phoneController.text.trim(),
+            'gender': _gender,
+            'age': _age,
+            'profession': _professionController.text.trim(),
+            'education': _educationController.text.trim(),
+            'address': _addressController.text.trim(),
+            'hide_name_on_leaderboard': false,
+            'is_approved': true,
+          });
         }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  } catch (e) {
+    final errStr = e.toString().toLowerCase();
+
+    // If unconfirmed or already registered without confirmation, auto-trigger OTP recovery
+    if (errStr.contains('email not confirmed') || 
+        errStr.contains('already registered') || 
+        errStr.contains('user already exists')) {
+      try {
+        await supabase.auth.resend(type: OtpType.signup, email: email);
+        if (mounted) {
+          _showOtpVerificationDialog(email, password);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.orange,
+              content: Text('Account pending verification. A fresh OTP has been sent.'),
+            ),
+          );
+        }
+        return;
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   @override
   Widget build(BuildContext context) {
