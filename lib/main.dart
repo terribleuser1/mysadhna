@@ -212,7 +212,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 13; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 14; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
