@@ -183,17 +183,6 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
         ),
       ),
       actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
         TextButton(
           onPressed: _isSending ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
@@ -223,7 +212,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 11; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 13; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -1953,17 +1942,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       appBar: AppBar(
         title: Text(AppStrings.tr('journey_title')),
         actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
           ActionChip(
             backgroundColor: AppColors.creamBg,
             side: const BorderSide(color: AppColors.borderSubtle),
@@ -2450,17 +2428,6 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
             ),
           ),
           actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
@@ -2830,18 +2797,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Super Admin Console'), actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
+      appBar: AppBar(title: const Text('Super Admin Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
       body: FutureBuilder<AdminStats>(
         future: _adminFuture,
         builder: (context, snapshot) {
@@ -3025,17 +2981,6 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                                 decoration: const InputDecoration(hintText: 'Enter spiritual guidance for this month...', border: OutlineInputBorder()),
                               ),
                               actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
                                 TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
                                 ElevatedButton(
                                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
@@ -3141,18 +3086,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Preacher Console'), actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
+      appBar: AppBar(title: const Text('Preacher Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -3404,17 +3338,6 @@ class WebApkDownloadBanner extends StatelessWidget {
             ],
           ),
           actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.saffronDark,
@@ -3558,17 +3481,6 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           decoration: InputDecoration(hintText: 'Enter $title', border: const OutlineInputBorder()),
         ),
         actions: [
-          const NotificationBellIcon(),
-          IconButton(
-            icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'Send Push Notification',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
-              );
-            },
-          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
