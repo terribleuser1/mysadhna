@@ -192,9 +192,9 @@ class RankingItem {
   final int rank;
   final String userId;
   final String devoteeName;
-  final String preacherId;
+  final String? preacherId;
   final String preacherTitle;
-  final double totalSP;
+  final double totalSp;
   final int totalRounds;
   final bool isCurrentUser;
   final String avatarBadge;
@@ -203,23 +203,23 @@ class RankingItem {
     required this.rank,
     required this.userId,
     required this.devoteeName,
-    required this.preacherId,
+    this.preacherId,
     required this.preacherTitle,
-    required this.totalSP,
+    required this.totalSp,
     required this.totalRounds,
     required this.isCurrentUser,
-    this.avatarBadge = '📿',
+    required this.avatarBadge,
   });
 
   factory RankingItem.fromMap(Map<String, dynamic> map) {
     return RankingItem(
-      rank: (map['rank'] as num?)?.toInt() ?? 0,
+      rank: int.tryParse(map['rank']?.toString() ?? '1') ?? 1,
       userId: map['user_id']?.toString() ?? '',
       devoteeName: map['devotee_name']?.toString() ?? 'Devotee',
-      preacherId: map['preacher_id']?.toString() ?? '',
-      preacherTitle: map['preacher_title']?.toString() ?? '',
-      totalSP: (map['total_sp'] as num?)?.toDouble() ?? 0.0,
-      totalRounds: (map['total_rounds'] as num?)?.toInt() ?? 0,
+      preacherId: map['preacher_id']?.toString(),
+      preacherTitle: map['preacher_title']?.toString() ?? 'General Circle',
+      totalSp: double.tryParse(map['total_sp']?.toString() ?? '0') ?? 0.0,
+      totalRounds: int.tryParse(map['total_rounds']?.toString() ?? '0') ?? 0,
       isCurrentUser: map['is_current_user'] == true,
       avatarBadge: map['avatar_badge']?.toString() ?? '📿',
     );
