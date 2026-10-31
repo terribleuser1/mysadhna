@@ -19,7 +19,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 16;
+const int kCurrentInstalledVersionCode = 17;
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -2410,7 +2410,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.9 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.10 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
