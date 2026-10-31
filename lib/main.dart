@@ -1,7 +1,7 @@
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +17,203 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
+// ==========================================
+// PUSH NOTIFICATION BROADCAST CONTROLLER
+// ==========================================
+
+class NotificationBroadcastDialog extends StatefulWidget {
+  final bool isAdmin;
+  final String? preacherId;
+  const NotificationBroadcastDialog({Key? key, required this.isAdmin, this.preacherId}) : super(key: key);
+
+  @override
+  State<NotificationBroadcastDialog> createState() => _NotificationBroadcastDialogState();
+}
+
+class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialog> {
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+  String _selectedTarget = 'preacher_counsellees';
+  bool _isSending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isAdmin) {
+      _selectedTarget = 'all';
+    } else {
+      _selectedTarget = 'preacher_counsellees';
+    }
+  }
+
+  Future<void> _sendNotification() async {
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both title and message')),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
+
+    try {
+      // 1. Fetch recipient tokens from Supabase RPC
+      final res = await Supabase.instance.client.rpc(
+        'get_broadcast_tokens',
+        params: {
+          'p_target_group': _selectedTarget,
+          'p_target_preacher_id': widget.preacherId,
+        },
+      ) as List<dynamic>;
+
+      final tokens = res
+          .map((e) => e['fcm_token']?.toString())
+          .where((t) => t != null && t.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+
+      if (tokens.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No registered devices found in this group')),
+        );
+        setState(() => _isSending = false);
+        return;
+      }
+
+      // 2. Log broadcast in Supabase
+      await Supabase.instance.client.from('notification_broadcasts').insert({
+        'sender_id': Supabase.instance.client.auth.currentUser?.id,
+        'target_group': _selectedTarget,
+        'target_preacher_id': widget.preacherId,
+        'title': title,
+        'body': body,
+        'recipient_count': tokens.length,
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Dispatched to ${tokens.length} devotees! (Token sync logged)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.campaign, color: Color(0xFFD97706)),
+          SizedBox(width: 8),
+          Text('Broadcast Notification', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.isAdmin) ...[
+              const Text('Audience Group:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                value: _selectedTarget,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All Users & Devotees')),
+                  DropdownMenuItem(value: 'all_preachers', child: Text('All Preachers Only')),
+                  DropdownMenuItem(value: 'all_counsellees', child: Text('All Counsellees (General)')),
+                  DropdownMenuItem(value: 'preacher_counsellees', child: Text('My Counsellees Only')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedTarget = val);
+                },
+              ),
+              const SizedBox(height: 14),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Audience: All Devotees in Your Circle',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title (e.g. Mangala Arati / Class Reminder)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bodyController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Message Body',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
+        TextButton(
+          onPressed: _isSending ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _isSending ? null : _sendNotification,
+          icon: _isSending
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.send, size: 16),
+          label: Text(_isSending ? 'Sending...' : 'Send Broadcast'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFD97706),
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -25,7 +222,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 9; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 10; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -1206,9 +1403,9 @@ class DevoteeSelfDashboardScreen extends StatefulWidget {
 }
 
 class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen> {
+  bool _isFlushingOffline = false;
   late Future<PersonalStats> _statsFuture;
   String _userName = 'Devotee';
-  bool _isFlushingOffline = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -1755,6 +1952,16 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       appBar: AppBar(
         title: Text(AppStrings.tr('journey_title')),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
           ActionChip(
             backgroundColor: AppColors.creamBg,
             side: const BorderSide(color: AppColors.borderSubtle),
@@ -2241,6 +2448,16 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
             ),
           ),
           actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
@@ -2610,7 +2827,17 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Super Admin Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
+      appBar: AppBar(title: const Text('Super Admin Console'), actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
       body: FutureBuilder<AdminStats>(
         future: _adminFuture,
         builder: (context, snapshot) {
@@ -2794,6 +3021,16 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                                 decoration: const InputDecoration(hintText: 'Enter spiritual guidance for this month...', border: OutlineInputBorder()),
                               ),
                               actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
                                 TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
                                 ElevatedButton(
                                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
@@ -2899,7 +3136,17 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Preacher Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
+      appBar: AppBar(title: const Text('Preacher Console'), actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -3151,6 +3398,16 @@ class WebApkDownloadBanner extends StatelessWidget {
             ],
           ),
           actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.saffronDark,
@@ -3294,6 +3551,16 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           decoration: InputDecoration(hintText: 'Enter $title', border: const OutlineInputBorder()),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Send Push Notification',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const NotificationBroadcastDialog(isAdmin: true),
+              );
+            },
+          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
