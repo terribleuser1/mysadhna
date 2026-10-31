@@ -128,4 +128,8 @@ Ensure your Supabase project has the required tables:
 
 ## 📄 License
 
+<<<<<<< HEAD
 This project is open-source and available under the [MIT License](LICENSE).
+=======
+This project is open-source and available under the [MIT License](LICENSE).
+>>>>>>> d0cdf53 (docs: update comprehensive README)
