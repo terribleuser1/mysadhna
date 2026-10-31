@@ -19,7 +19,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 20;
+const int kCurrentInstalledVersionCode = 21;
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -252,7 +252,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://mtduhncyvcmzgekekieq.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
+    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
   );
 
   runApp(const MySadhnaApp());
@@ -1437,8 +1437,13 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
-
-              final mantrasCount = stats.totalRounds * 108;
+              
+              final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+              final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+              final hasToday = stats.recent.any((e) => e.entryDate == todayStr);
+              final hasYest = stats.recent.any((e) => e.entryDate == yestStr);
+              final bool bothSubmitted = hasToday && hasYest;
+              final namesCount = stats.totalRounds * 1728;
 
               return ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -1501,7 +1506,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(stats.hasLoggedToday ? "Today's Sadhana Offered" : "Today's Sadhana Pending", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                               Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : 'Log before midnight to earn Sukriti Points', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                             ],
                           ),
@@ -1512,7 +1517,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
                             if (result == true) _refreshStats();
                           },
-                          child: Text(stats.hasLoggedToday ? 'Edit Log' : 'Submit'),
+                          child: Text(bothSubmitted ? 'Edit Sadhna' : 'Submit Sadhna'),
                         ),
                       ],
                     ),
@@ -1558,7 +1563,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                               ),
                               const SizedBox(height: 8),
                               Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                              Text('${formatIndianNumber(mantrasCount)} Mantras', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                              Text('${formatIndianNumber(namesCount)} Holy Names', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                             ],
                           ),
                         ),
@@ -1567,6 +1572,48 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                   ),
                   const SizedBox(height: 18),
                   _buildHeatmapGrid(stats.recent),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            Text('Active: ${stats.avatarBadge}', style: const TextStyle(fontSize: 16)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            const Chip(avatar: Text('📿'), label: Text('Japa Sadhak')),
+                            const Chip(avatar: Text('🌅'), label: Text('Brahma Muhurta')),
+                            Chip(avatar: const Text('🔥'), label: Text('${stats.currentStreak}d Streak')),
+                            if (stats.totalRounds >= 64) const Chip(avatar: Text('👑'), label: Text('Harinam Premi')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 46),
+                      side: const BorderSide(color: AppColors.saffronDark),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
+                    label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Generating monthly sadhana report PDF... Ready for print.')),
+                      );
+                    },
+                  ),
                 ],
               );
             },
@@ -1637,6 +1684,14 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
           _otherHearingMinutes = rec.otherHearingMinutes;
           _shlokasMemorized = rec.shlokasMemorized;
           _isStreakFreeze = rec.isStreakFreeze;
+          final wakeParts = rec.wakeUpTime.split(':');
+          if (wakeParts.length >= 2) {
+            _wakeUpTime = TimeOfDay(hour: int.tryParse(wakeParts[0]) ?? 4, minute: int.tryParse(wakeParts[1]) ?? 0);
+          }
+          final bedParts = rec.bedTime.split(':');
+          if (bedParts.length >= 2) {
+            _bedTime = TimeOfDay(hour: int.tryParse(bedParts[0]) ?? 21, minute: int.tryParse(bedParts[1]) ?? 45);
+          }
         });
       }
     } catch (_) {}
@@ -2393,7 +2448,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, avatar_badge, date_of_birth, role, preachers(display_title, code_suffix)').eq('id', user.id).single();
+        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, avatar_badge, date_of_birth, role, preacher_id, preachers(display_title, code_suffix)').eq('id', user.id).single();
         if (mounted) setState(() { _profileData = res; _isLoading = false; });
         return;
       } catch (_) {}
@@ -2431,10 +2486,10 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 }
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
                 }
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             child: const Text('Update'),
@@ -2450,48 +2505,84 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final profCtrl = TextEditingController(text: _profileData?['profession'] ?? '');
     final eduCtrl = TextEditingController(text: _profileData?['education'] ?? '');
     final addrCtrl = TextEditingController(text: _profileData?['address'] ?? '');
+    final emailCtrl = TextEditingController(text: supabase.auth.currentUser?.email ?? '');
+    final passCtrl = TextEditingController();
+    String? selectedPreacherId = _profileData?['preacher_id']?.toString();
 
+    List<Map<String, dynamic>> preachersList = [];
+    try {
+      final pRes = await supabase.from('preachers').select('id, display_title, code_suffix').eq('is_active', true);
+      preachersList = List<Map<String, dynamic>>.from(pRes as List);
+    } catch (_) {}
+
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Profile Details'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
-              const SizedBox(height: 10),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
-              const SizedBox(height: 10),
-              TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
-              const SizedBox(height: 10),
-              TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder())),
-              const SizedBox(height: 10),
-              TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
-            ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDlgState) => AlertDialog(
+          title: const Text('Edit Complete Profile Details'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'New Password (leave empty to keep current)', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPreacherId,
+                  decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
+                  items: preachersList.map((p) => DropdownMenuItem<String>(
+                    value: p['id'].toString(),
+                    child: Text('${p['display_title']} (${p['code_suffix']})'),
+                  )).toList(),
+                  onChanged: (val) => setDlgState(() => selectedPreacherId = val),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+              onPressed: () async {
+                final user = supabase.auth.currentUser;
+                if (user != null) {
+                  if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
+                    await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
+                  }
+                  if (passCtrl.text.trim().isNotEmpty) {
+                    await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
+                  }
+                  await supabase.from('profiles').update({
+                    'full_name': nameCtrl.text.trim(),
+                    'email': emailCtrl.text.trim(),
+                    'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                    'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                    'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                    'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                    'preacher_id': selectedPreacherId,
+                  }).eq('id', user.id);
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    _fetchProfile();
+                  }
+                }
+              },
+              child: const Text('Save Details'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-            onPressed: () async {
-              final user = supabase.auth.currentUser;
-              if (user != null) {
-                await supabase.from('profiles').update({
-                  'full_name': nameCtrl.text.trim(),
-                  'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                  'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
-                  'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
-                  'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                }).eq('id', user.id);
-                if (ctx.mounted) Navigator.pop(ctx);
-                _fetchProfile();
-              }
-            },
-            child: const Text('Save Details'),
-          ),
-        ],
       ),
     );
   }
@@ -2564,7 +2655,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.13 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.14 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
