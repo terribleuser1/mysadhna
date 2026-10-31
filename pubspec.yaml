@@ -2,7 +2,7 @@ name: my_sadhna
 description: "Daily Vaishnava Sadhana & Sukriti Points Tracker"
 publish_to: 'none'
 
-version: 1.0.8+10
+version: 1.0.9+11
 
 environment:
   sdk: ^3.13.7

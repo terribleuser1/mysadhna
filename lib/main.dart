@@ -183,6 +183,7 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
         ),
       ),
       actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -222,7 +223,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 10; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 11; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -1952,6 +1953,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       appBar: AppBar(
         title: Text(AppStrings.tr('journey_title')),
         actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -2448,6 +2450,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
             ),
           ),
           actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -2828,6 +2831,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Super Admin Console'), actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -3021,6 +3025,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                                 decoration: const InputDecoration(hintText: 'Enter spiritual guidance for this month...', border: OutlineInputBorder()),
                               ),
                               actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -3137,6 +3142,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Preacher Console'), actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -3398,6 +3404,7 @@ class WebApkDownloadBanner extends StatelessWidget {
             ],
           ),
           actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -3551,6 +3558,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           decoration: InputDecoration(hintText: 'Enter $title', border: const OutlineInputBorder()),
         ),
         actions: [
+          const NotificationBellIcon(),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
             tooltip: 'Send Push Notification',
@@ -3798,6 +3806,246 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+// ==========================================
+// IN-APP NOTIFICATION INBOX (BELL ICON)
+// ==========================================
+
+class NotificationBellIcon extends StatefulWidget {
+  const NotificationBellIcon({super.key});
+
+  @override
+  State<NotificationBellIcon> createState() => _NotificationBellIconState();
+}
+
+class _NotificationBellIconState extends State<NotificationBellIcon> {
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkNotifications();
+  }
+
+  Future<void> _checkNotifications() async {
+    try {
+      final res = await Supabase.instance.client.rpc('get_user_notification_feed') as List<dynamic>;
+      if (mounted) {
+        setState(() {
+          _unreadCount = res.length;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openInbox() {
+    setState(() => _unreadCount = 0);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const NotificationInboxSheet(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_rounded, size: 26),
+          tooltip: 'Noticeboard & Notifications',
+          onPressed: _openInbox,
+        ),
+        if (_unreadCount > 0)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Color(0xFFDC2626),
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                _unreadCount > 9 ? '9+' : '$_unreadCount',
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class NotificationInboxSheet extends StatefulWidget {
+  const NotificationInboxSheet({super.key});
+
+  @override
+  State<NotificationInboxSheet> createState() => _NotificationInboxSheetState();
+}
+
+class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
+  late Future<List<dynamic>> _feedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedFuture = _loadFeed();
+  }
+
+  Future<List<dynamic>> _loadFeed() async {
+    try {
+      final res = await Supabase.instance.client.rpc('get_user_notification_feed');
+      return res as List<dynamic>;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 6),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.campaign, color: Color(0xFFD97706)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Announcements & Notices',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: FutureBuilder<List<dynamic>>(
+              future: _feedFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final list = snapshot.data ?? [];
+                if (list.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.notifications_off_outlined, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text(
+                          'No announcements right now.',
+                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = list[index];
+                    final title = item['title']?.toString() ?? 'Notice';
+                    final body = item['body']?.toString() ?? '';
+                    final sender = item['sender_name']?.toString() ?? 'Admin';
+                    final dateStr = item['created_at']?.toString() ?? '';
+                    String displayDate = '';
+                    if (dateStr.isNotEmpty) {
+                      try {
+                        final dt = DateTime.parse(dateStr).toLocal();
+                        displayDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                      } catch (_) {
+                        displayDate = dateStr;
+                      }
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E)),
+                                ),
+                              ),
+                              Text(
+                                displayDate,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            body,
+                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.person_pin, size: 14, color: Color(0xFFD97706)),
+                              const SizedBox(width: 4),
+                              Text(
+                                sender,
+                                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF78350F)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
