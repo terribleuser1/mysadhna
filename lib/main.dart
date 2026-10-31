@@ -18,7 +18,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 6; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 7; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -1031,6 +1031,9 @@ class _MandatoryProfileForm extends StatefulWidget {
 
 class _MandatoryProfileFormState extends State<_MandatoryProfileForm> {
   final _phoneCtrl = TextEditingController();
+  final _professionCtrl = TextEditingController();
+  final _educationCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
   DateTime? _dob;
   String? _preacherId;
   List<PreacherItem> _preachers = [];
@@ -1064,6 +1067,9 @@ class _MandatoryProfileFormState extends State<_MandatoryProfileForm> {
         'preacher_id': _preacherId,
         'date_of_birth': DateFormat('yyyy-MM-dd').format(_dob!),
         'phone_number': _phoneCtrl.text.trim(),
+        'profession': _professionCtrl.text.trim(),
+        'education': _educationCtrl.text.trim(),
+        'address': _addressCtrl.text.trim(),
       }).eq('id', widget.userId);
 
       widget.onCompleted();
@@ -1074,72 +1080,102 @@ class _MandatoryProfileFormState extends State<_MandatoryProfileForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: 24,
-        left: 24,
-        right: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Center(child: MSMonogramLogo(size: 50)),
-          const SizedBox(height: 12),
-          const Center(
-            child: Text('Complete Your Devotee Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          ),
-          const SizedBox(height: 6),
-          const Center(
-            child: Text('Connect with your Bhakti Vriksha counselor to start tracking sadhana.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-          ),
-          const SizedBox(height: 20),
-          DropdownButtonFormField<String>(
-            value: _preacherId,
-            decoration: InputDecoration(labelText: 'Assigned Preacher / Counselor', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-            items: _preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
-            onChanged: (val) => setState(() => _preacherId = val),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
-            child: ListTile(
-              leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-              title: Text(_dob == null ? 'Select Date of Birth' : DateFormat('dd MMMM yyyy').format(_dob!)),
-              trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime(2000, 1, 1),
-                  firstDate: DateTime(1940),
-                  lastDate: DateTime.now(),
-                );
-                if (picked != null) setState(() => _dob = picked);
-              },
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          top: 24,
+          left: 24,
+          right: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Center(child: MSMonogramLogo(size: 50)),
+            const SizedBox(height: 12),
+            const Center(
+              child: Text('Complete Your Devotee Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'WhatsApp Phone Number',
-              prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            const SizedBox(height: 6),
+            const Center(
+              child: Text('Connect with your Bhakti Vriksha counselor to start tracking sadhana.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              onPressed: _saving ? null : _submit,
-              child: _saving ? const CircularProgressIndicator(color: Colors.white) : const Text('Save & Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              value: _preacherId,
+              decoration: InputDecoration(labelText: 'Assigned Preacher / Counselor', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+              items: _preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+              onChanged: (val) => setState(() => _preacherId = val),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
+              child: ListTile(
+                leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
+                title: Text(_dob == null ? 'Select Date of Birth' : DateFormat('dd MMMM yyyy').format(_dob!)),
+                trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime(2000, 1, 1),
+                    firstDate: DateTime(1940),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) setState(() => _dob = picked);
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'WhatsApp Phone Number',
+                prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _professionCtrl,
+              decoration: InputDecoration(
+                labelText: 'Profession',
+                prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _educationCtrl,
+              decoration: InputDecoration(
+                labelText: 'Education',
+                prefixIcon: const Icon(Icons.school_outlined, color: AppColors.saffronDark),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _addressCtrl,
+              decoration: InputDecoration(
+                labelText: 'City / Address',
+                prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                onPressed: _saving ? null : _submit,
+                child: _saving ? const CircularProgressIndicator(color: Colors.white) : const Text('Save & Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3230,6 +3266,38 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  Future<void> _editProfileField(String fieldKey, String title, String currentValue) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+    final ctrl = TextEditingController(text: currentValue == 'Not set' ? '' : currentValue);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit $title'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: InputDecoration(hintText: 'Enter $title', border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (updated != null) {
+      await supabase.from('profiles').update({fieldKey: updated}).eq('id', user.id);
+      HapticFeedback.mediumImpact();
+      setState(() {
+        if (_profileData != null) _profileData![fieldKey] = updated;
+      });
+    }
+  }
+
   Future<void> _updateDateOfBirth() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -3390,11 +3458,11 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                       const Divider(),
                       _row('Date of Birth', dobDisplay, onTap: _updateDateOfBirth, showEditIcon: true),
                       const Divider(),
-                      _row('Phone', _profileData?['phone_number'] ?? 'Not set'),
+                      _row('Phone', _profileData?['phone_number'] ?? 'Not set', onTap: () => _editProfileField('phone_number', 'Phone Number', _profileData?['phone_number'] ?? 'Not set'), showEditIcon: true),
                       const Divider(),
-                      _row('Profession', _profileData?['profession'] ?? 'Not set'),
+                      _row('Profession', _profileData?['profession'] ?? 'Not set', onTap: () => _editProfileField('profession', 'Profession', _profileData?['profession'] ?? 'Not set'), showEditIcon: true),
                       const Divider(),
-                      _row('Address', _profileData?['address'] ?? 'Not set'),
+                      _row('Address', _profileData?['address'] ?? 'Not set', onTap: () => _editProfileField('address', 'City / Address', _profileData?['address'] ?? 'Not set'), showEditIcon: true),
                       const Divider(),
                       _row('Preacher', pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None'),
                     ],
