@@ -2,10 +2,12 @@ import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    id("com.google.gms.google-services")
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after Android and Kotlin plugins
     id("dev.flutter.flutter-gradle-plugin")
+    // Google services plugin must be applied after the Android application plugin
+    id("com.google.gms.google-services")
 }
 
 val keystoreProperties = Properties()
@@ -20,16 +22,19 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
         applicationId = "com.example.my_sadhna"
-        minSdk = flutter.minSdkVersion
+        // Enforce minimum SDK 21 for Firebase Messaging and Supabase
+        minSdk = flutter.minSdkVersion.coerceAtLeast(21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -43,7 +48,11 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
             isShrinkResources = false
         }
@@ -52,10 +61,14 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
