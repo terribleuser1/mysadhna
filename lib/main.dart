@@ -217,7 +217,6 @@ class SacredBadge {
   });
 }
 
-// Global Language Controller
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
 class AppStrings {
@@ -325,16 +324,16 @@ class MySadhnaApp extends StatelessWidget {
               secondary: AppColors.saffronDark,
               surface: AppColors.cardBg,
             ),
-            appBarTheme: AppBarTheme(
+            appBarTheme: const AppBarTheme(
               backgroundColor: AppColors.creamBg,
               elevation: 0,
               centerTitle: true,
-              titleTextStyle: GoogleFonts.outfit(
+              titleTextStyle: TextStyle(
                 color: AppColors.textDark,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
-              iconTheme: const IconThemeData(color: AppColors.textDark),
+              iconTheme: IconThemeData(color: AppColors.textDark),
             ),
           ),
           home: const AuthGate(),
@@ -389,14 +388,9 @@ class MSMonogramLogo extends StatelessWidget {
 // ============================================================================
 // 4. AUTH GATE
 // ============================================================================
-class AuthGate extends StatefulWidget {
+class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
-  @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
@@ -554,7 +548,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const MSMonogramLogo(size: 64).animate().scale(duration: 400.ms),
                 const SizedBox(height: 16),
                 Text('My Sadhna', style: GoogleFonts.cinzel(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: GoogleFonts.outfit(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
+                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: const TextStyle(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
                 const SizedBox(height: 24),
                 Container(
                   decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
@@ -1445,7 +1439,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     onPressed: () => _generatePdfReport(stats),
                   ),
                   const SizedBox(height: 24),
-                  Text(AppStrings.tr('sacred_badges'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                  Text(AppStrings.tr('sacred_badges'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -1491,7 +1485,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     }).toList(),
                   ),
                   const SizedBox(height: 24),
-                  Text(AppStrings.tr('recent_offerings'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                  Text(AppStrings.tr('recent_offerings'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
                   const SizedBox(height: 12),
                   if (stats.recent.isEmpty)
                     Card(
@@ -1530,7 +1524,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 }
 
 // ============================================================================
-// 8. DAILY SADHANA SUBMISSION FORM
+// 8. DAILY SADHANA SUBMISSION FORM (Clean Inline Slider Stepper)
 // ============================================================================
 class DailySadhanaEntryScreen extends StatefulWidget {
   final DailyLogData? existingRecord;
@@ -1545,9 +1539,10 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
   TimeOfDay _wakeUpTime = const TimeOfDay(hour: 4, minute: 0);
   TimeOfDay _bedTime = const TimeOfDay(hour: 21, minute: 45);
 
-  int _rounds = 16;
-  int _spReadingMinutes = 45;
-  int _spLectureMinutes = 30;
+  // Defaults strictly set to 0
+  int _rounds = 0;
+  int _spReadingMinutes = 0;
+  int _spLectureMinutes = 0;
   int _otherHearingMinutes = 0;
   int _shlokasMemorized = 0;
   bool _isSaving = false;
@@ -1638,6 +1633,155 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     }
   }
 
+  void _showDirectValueDialog({
+    required String title,
+    required int currentValue,
+    required int min,
+    required int max,
+    required ValueChanged<int> onSubmitted,
+  }) {
+    final textController = TextEditingController(text: '$currentValue');
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Enter $title'),
+          content: TextField(
+            controller: textController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              labelText: 'Direct Value ($min - $max)',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+              onPressed: () {
+                final parsed = int.tryParse(textController.text.trim()) ?? currentValue;
+                onSubmitted(parsed.clamp(min, max));
+                Navigator.pop(ctx);
+              },
+              child: const Text('Set'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSliderStepperCard({
+    required String title,
+    required String subtitle,
+    required int value,
+    required int min,
+    required int max,
+    required int step,
+    required String unit,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.borderSubtle),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => _showDirectValueDialog(
+                    title: title,
+                    currentValue: value,
+                    min: min,
+                    max: max,
+                    onSubmitted: onChanged,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.creamBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$value $unit',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit, size: 12, color: AppColors.textMuted),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.saffronDark, size: 22),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: value > min ? () => onChanged((value - step).clamp(min, max)) : null,
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: AppColors.saffronPrimary,
+                      inactiveTrackColor: Colors.grey.shade200,
+                      thumbColor: AppColors.saffronDark,
+                      overlayColor: AppColors.saffronPrimary.withValues(alpha: 0.15),
+                      trackHeight: 4,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                    ),
+                    child: Slider(
+                      value: value.toDouble(),
+                      min: min.toDouble(),
+                      max: max.toDouble(),
+                      divisions: (max - min) ~/ step,
+                      onChanged: (newVal) => onChanged(newVal.round()),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: AppColors.saffronDark, size: 22),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: value < max ? () => onChanged((value + step).clamp(min, max)) : null,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final liveSP = _calculateLiveSP();
@@ -1720,16 +1864,61 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              _stepperCard('Japa Meditation Rounds', 'Target: 16 rounds (100 SP Mangala bonus)', _rounds, [1, 4, 16], 0, 64, null, (v) => setState(() => _rounds = v)),
-              const SizedBox(height: 12),
-              _stepperCard(AppStrings.tr('sp_reading'), 'Target: 30–45 mins (25 SP per 30m)', _spReadingMinutes, [15, 30, 45, 60], 0, 300, 'mins', (v) => setState(() => _spReadingMinutes = v)),
-              const SizedBox(height: 12),
-              _stepperCard(AppStrings.tr('sp_hearing'), 'Target: 30–45 mins (25 SP per 30m)', _spLectureMinutes, [15, 30, 45, 60], 0, 300, 'mins', (v) => setState(() => _spLectureMinutes = v)),
-              const SizedBox(height: 12),
-              _stepperCard(AppStrings.tr('other_hearing'), 'Kirtan / Katha (25 SP per 30m)', _otherHearingMinutes, [15, 30, 60], 0, 300, 'mins', (v) => setState(() => _otherHearingMinutes = v)),
-              const SizedBox(height: 12),
-              _stepperCard(AppStrings.tr('shlokas'), '+50 SP earned per memorized verse', _shlokasMemorized, [1, 2], 0, 20, 'shlokas', (v) => setState(() => _shlokasMemorized = v)),
-              const SizedBox(height: 24),
+              _buildSliderStepperCard(
+                title: 'Japa Meditation Rounds',
+                subtitle: 'Target: 16 rounds (Tap number to type)',
+                value: _rounds,
+                min: 0,
+                max: 64,
+                step: 1,
+                unit: 'rounds',
+                onChanged: (v) => setState(() => _rounds = v),
+              ),
+              const SizedBox(height: 10),
+              _buildSliderStepperCard(
+                title: AppStrings.tr('sp_reading'),
+                subtitle: 'Target: 30–45 mins (25 SP per 30m)',
+                value: _spReadingMinutes,
+                min: 0,
+                max: 180,
+                step: 5,
+                unit: 'mins',
+                onChanged: (v) => setState(() => _spReadingMinutes = v),
+              ),
+              const SizedBox(height: 10),
+              _buildSliderStepperCard(
+                title: AppStrings.tr('sp_hearing'),
+                subtitle: 'Target: 30–45 mins (25 SP per 30m)',
+                value: _spLectureMinutes,
+                min: 0,
+                max: 180,
+                step: 5,
+                unit: 'mins',
+                onChanged: (v) => setState(() => _spLectureMinutes = v),
+              ),
+              const SizedBox(height: 10),
+              _buildSliderStepperCard(
+                title: AppStrings.tr('other_hearing'),
+                subtitle: 'Kirtan / Katha (25 SP per 30m)',
+                value: _otherHearingMinutes,
+                min: 0,
+                max: 180,
+                step: 5,
+                unit: 'mins',
+                onChanged: (v) => setState(() => _otherHearingMinutes = v),
+              ),
+              const SizedBox(height: 10),
+              _buildSliderStepperCard(
+                title: AppStrings.tr('shlokas'),
+                subtitle: '+50 SP earned per memorized verse',
+                value: _shlokasMemorized,
+                min: 0,
+                max: 20,
+                step: 1,
+                unit: 'shlokas',
+                onChanged: (v) => setState(() => _shlokasMemorized = v),
+              ),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -1765,57 +1954,6 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
               Text(subtitle ?? 'Tap to change', style: const TextStyle(color: AppColors.saffronDark, fontSize: 11, fontWeight: FontWeight.w600)),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _stepperCard(String label, String subtitle, int currentValue, List<int> pills, int min, int max, String? unit, ValueChanged<int> onChanged) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)), Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12))])),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderSubtle)),
-                  child: Text(unit != null ? '$currentValue $unit' : '$currentValue', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                IconButton(icon: const Icon(Icons.remove_circle_outline, color: AppColors.saffronDark), onPressed: currentValue > min ? () => onChanged(currentValue - 1) : null),
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: pills.map((p) {
-                      return ActionChip(
-                        label: Text('+$p'),
-                        backgroundColor: AppColors.creamBg,
-                        side: const BorderSide(color: AppColors.borderSubtle),
-                        labelStyle: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark, fontSize: 12),
-                        onPressed: () {
-                          HapticFeedback.selectionClick();
-                          final newVal = currentValue + p;
-                          onChanged(newVal > max ? max : newVal);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-                IconButton(icon: const Icon(Icons.add_circle_outline, color: AppColors.saffronDark), onPressed: currentValue < max ? () => onChanged(currentValue + 1) : null),
-              ],
-            ),
-          ],
         ),
       ),
     );
@@ -1925,7 +2063,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
 }
 
 // ============================================================================
-// 10. PREACHER CONSOLE (Inactivity Alert Badge, Notes & Direct Comms)
+// 10. PREACHER CONSOLE
 // ============================================================================
 class PreacherConsoleScreen extends StatefulWidget {
   const PreacherConsoleScreen({super.key});
@@ -2052,7 +2190,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(devotee.fullName, style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+                            Text(devotee.fullName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                             Text('Sadhana Report for ${DateFormat('MMMM yyyy').format(selectedMonth)}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           ],
                         ),
@@ -2185,7 +2323,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('My Counselees (${_counselees.length})', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                    Text('My Counselees (${_counselees.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -2351,17 +2489,14 @@ class WebApkDownloadBanner extends StatelessWidget {
   const WebApkDownloadBanner({super.key});
 
   void _triggerDownloadAndShowDialog(BuildContext context) async {
-    // Resolve absolute URL using the current browser domain/port
     final apkUri = Uri.base.resolve('downloads/my_sadhna.apk');
-
     try {
       await launchUrl(
         apkUri,
         mode: LaunchMode.externalApplication,
-        webOnlyWindowName: '_self', // Triggers browser download without popup blockers
+        webOnlyWindowName: '_self',
       );
     } catch (_) {
-      // Fallback direct launch if browser blocks external app mode
       await launchUrl(apkUri, webOnlyWindowName: '_blank');
     }
 
@@ -2370,8 +2505,8 @@ class WebApkDownloadBanner extends StatelessWidget {
         context: context,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
+          title: const Row(
+            children: [
               Icon(Icons.check_circle_outline, color: AppColors.tulsiGreen, size: 28),
               SizedBox(width: 10),
               Text('Thanks for Downloading!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -2460,10 +2595,10 @@ class WebApkDownloadBanner extends StatelessWidget {
             child: const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
           ),
           const SizedBox(width: 14),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Get the Android App',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textDark),
@@ -2564,7 +2699,6 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Web download card (auto-hides on APK)
               const WebApkDownloadBanner(),
               const SizedBox(height: 16),
               OutlinedButton(
