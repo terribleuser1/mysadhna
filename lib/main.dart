@@ -18,7 +18,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 7; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 8; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
