@@ -19,11 +19,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 19;
+const int kCurrentInstalledVersionCode = 20;
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
+
+String formatIndianNumber(num count) {
+  if (count >= 10000000) {
+    return '${(count / 10000000).toStringAsFixed(1)} Cr';
+  } else if (count >= 100000) {
+    return '${(count / 100000).toStringAsFixed(1)} L';
+  } else if (count >= 1000) {
+    return '${(count / 1000).toStringAsFixed(1)} K';
+  }
+  return count.toString();
+}
 
 class AppColors {
   static const Color saffronPrimary = Color(0xFFFF9933);
@@ -65,14 +76,12 @@ class PreacherItem {
 class AdminStats {
   final int devotees;
   final int preachers;
-  final int entries;
   final List<DevoteeProfileItem> devoteesList;
   final List<PreacherItem> preachersList;
 
   const AdminStats({
     required this.devotees,
     required this.preachers,
-    required this.entries,
     required this.devoteesList,
     required this.preachersList,
   });
@@ -196,6 +205,7 @@ class RankingItem {
   final String devoteeName;
   final String? preacherId;
   final String preacherTitle;
+  final String preacherSuffix;
   final double totalSp;
   double get totalSP => totalSp;
   final int totalRounds;
@@ -208,6 +218,7 @@ class RankingItem {
     required this.devoteeName,
     this.preacherId,
     required this.preacherTitle,
+    required this.preacherSuffix,
     required this.totalSp,
     required this.totalRounds,
     required this.isCurrentUser,
@@ -221,68 +232,12 @@ class RankingItem {
       devoteeName: map['devotee_name']?.toString() ?? 'Devotee',
       preacherId: map['preacher_id']?.toString(),
       preacherTitle: map['preacher_title']?.toString() ?? 'General Circle',
+      preacherSuffix: map['preacher_suffix']?.toString() ?? 'GEN',
       totalSp: double.tryParse(map['total_sp']?.toString() ?? '0') ?? 0.0,
       totalRounds: int.tryParse(map['total_rounds']?.toString() ?? '0') ?? 0,
       isCurrentUser: map['is_current_user'] == true,
       avatarBadge: map['avatar_badge']?.toString() ?? '📿',
     );
-  }
-}
-
-class AppStrings {
-  static String tr(String key) {
-    final isHi = appLanguage.value == 'hi';
-    switch (key) {
-      case 'app_title': return 'My Sadhna';
-      case 'journey_title': return isHi ? 'मेरी साधना यात्रा' : 'My Sadhna Journey';
-      case 'sukriti_points': return isHi ? 'सुकृति अंक (SP)' : 'Sukriti Points (SP)';
-      case 'accumulated_sp': return isHi ? 'कुल अर्जित सुकृति अंक' : 'ACCUMULATED SUKRITI POINTS';
-      case 'today_offered': return isHi ? 'आज की साधना अर्पित की गई' : "Today's Sadhana Offered";
-      case 'today_pending': return isHi ? 'आज की साधना शेष है' : "Today's Sadhana Pending";
-      case 'log_before_midnight': return isHi ? 'मध्यरात्रि से पूर्व समर्पण करें' : 'Log before midnight to earn Sukriti Points';
-      case 'submit': return isHi ? 'समर्पण करें' : 'Submit';
-      case 'edit_log': return isHi ? 'संशोधन करें' : 'Edit Log';
-      case 'japa_rounds': return isHi ? 'जप माला संख्या' : 'Total Japa Rounds';
-      case 'active_streak': return isHi ? 'निरंतर साधना' : 'Active Streak';
-      case 'sacred_badges': return isHi ? 'साधना उपलब्धियां एवं बैज' : 'Sacred Milestones & Badges';
-      case 'recent_offerings': return isHi ? 'हालिया समर्पण इतिहास' : 'Recent Offerings';
-      case 'record_sadhana': return isHi ? 'दैनिक साधना दर्ज करें' : 'Record Daily Sadhana';
-      case 'top_rankings': return isHi ? 'शीर्ष साधक तालिका' : 'Top Rankings';
-      case 'weekly_top': return isHi ? 'साप्ताहिक' : 'Weekly';
-      case 'monthly_top': return isHi ? 'मासिक' : 'Monthly';
-      case 'all_counselors': return isHi ? 'समस्त साधक' : 'All Circles';
-      case 'my_counselor_only': return isHi ? 'मेरी भक्ति वृक्ष मंडली' : 'My Counselor Group';
-      case 'wake_time': return isHi ? 'जागरण समय' : 'Wake-up Time';
-      case 'bed_time': return isHi ? 'शयन समय' : 'Bedtime';
-      case 'sp_reading': return isHi ? 'प्रभुपाद ग्रंथ अध्ययन' : 'SP Book Reading';
-      case 'sp_hearing': return isHi ? 'प्रभुपाद प्रवचन श्रवण' : 'SP Lecture Hearing';
-      case 'other_hearing': return isHi ? 'अन्य आध्यात्मिक श्रवण / कीर्तन' : 'Other Spiritual Hearing';
-      case 'shlokas': return isHi ? 'कंठस्थ किए गए श्लोक' : 'Shlokas Memorized Today';
-      case 'profile': return isHi ? 'प्रोफ़ाइल' : 'Profile';
-      case 'standings': return isHi ? 'स्थान' : 'Standings';
-      case 'home': return isHi ? 'मुख्य पृष्ठ' : 'Home';
-      case 'calendar_heatmap': return isHi ? 'मासिक साधना कैलेंडर' : 'Monthly Sadhana Heatmap';
-      case 'counselor_guidance': return isHi ? 'काउंसलर मार्गदर्शन एवं आशीर्वाद' : 'Counselor Guidance & Blessings';
-      case 'woke_up_now': return isHi ? 'अभी जागे (प्रणाम)' : 'Woke up just now (Pranam)';
-      case 'sleeping_now': return isHi ? 'शयन समय' : 'Sleeping now';
-      case 'streak_freeze': return isHi ? 'यात्रा / अस्वस्थ (Pass)' : 'Travel / Unwell Pass';
-      case 'register_tab': return isHi ? 'पंजीकरण' : 'Register';
-      case 'signin_tab': return isHi ? 'लॉग इन' : 'Sign In';
-      case 'email_label': return isHi ? 'ईमेल पता' : 'Email Address';
-      case 'password_label': return isHi ? 'पासवर्ड' : 'Password';
-      case 'name_label': return isHi ? 'पूरा / दीक्षित नाम' : 'Full / Initiated Name';
-      case 'phone_label': return isHi ? 'व्हाट्सएप फोन नंबर' : 'WhatsApp Phone Number';
-      case 'create_password_label': return isHi ? 'पासवर्ड बनाएं (6+ अक्षर)' : 'Create Password (6+ chars)';
-      case 'dob_label': return isHi ? 'जन्म तिथि (DOB)' : 'Date of Birth (DOB)';
-      case 'profession_label': return isHi ? 'व्यवसाय / पेशा' : 'Profession';
-      case 'education_label': return isHi ? 'योग्यता / शिक्षा' : 'Qualification';
-      case 'address_label': return isHi ? 'शहर / पता' : 'City / Address';
-      case 'assigned_preacher': return isHi ? 'निर्धारित प्रचारक / काउंसलर' : 'Assigned Preacher';
-      case 'next_step': return isHi ? 'अगला कदम' : 'Next Step';
-      case 'complete_registration': return isHi ? 'पंजीकरण पूर्ण करें' : 'Complete Registration';
-      case 'back_step': return isHi ? 'पिछले चरण पर वापस जाएं' : 'Back to previous step';
-      default: return key;
-    }
   }
 }
 
@@ -292,7 +247,7 @@ Future<void> main() async {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
-    debugPrint('Firebase init error: $e');
+    debugPrint('Firebase init: $e');
   }
 
   await Supabase.initialize(
@@ -338,45 +293,6 @@ class MySadhnaApp extends StatelessWidget {
   }
 }
 
-class MSMonogramLogo extends StatelessWidget {
-  final double size;
-  const MSMonogramLogo({super.key, this.size = 56});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [AppColors.saffronPrimary, AppColors.saffronDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.saffronPrimary.withValues(alpha: 0.35),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Text(
-          'MS',
-          style: GoogleFonts.cinzel(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: size * 0.42,
-            letterSpacing: 1.5,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class NotificationBellIcon extends StatefulWidget {
   const NotificationBellIcon({super.key});
 
@@ -417,7 +333,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
       children: [
         IconButton(
           icon: const Icon(Icons.notifications_none_rounded, size: 26),
-          tooltip: 'Noticeboard & Notifications',
+          tooltip: 'Noticeboard',
           onPressed: _openInbox,
         ),
         if (_unreadCount > 0)
@@ -460,7 +376,7 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
     try {
       final res = await supabase.rpc('get_user_notification_feed');
       return (res as List<dynamic>?) ?? [];
-    } catch (e) {
+    } catch (_) {
       return [];
     }
   }
@@ -635,11 +551,6 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
       return;
     }
 
-    if (widget.isAdmin && _selectedTarget == 'specific_preacher_counsellees' && _selectedPreacherId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a preacher')));
-      return;
-    }
-
     setState(() => _isSending = true);
 
     try {
@@ -675,7 +586,7 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Broadcast saved and dispatched to noticeboards! (${tokens.length} active device push sent)'),
+          content: Text('Notice broadcasted successfully! (${tokens.length} active push targets)'),
           backgroundColor: Colors.green,
         ),
       );
@@ -802,57 +713,6 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   @override
-  void initState() {
-    super.initState();
-    if (!kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForAppUpdate());
-    }
-  }
-
-  Future<void> _checkForAppUpdate() async {
-    try {
-      final res = await supabase.from('app_config').select('latest_version_code').maybeSingle();
-      final int latestCode = (res?['latest_version_code'] as num?)?.toInt() ?? (kCurrentInstalledVersionCode + 1);
-
-      if (latestCode > kCurrentInstalledVersionCode && mounted) {
-        showModalBottomSheet(
-          context: context,
-          isDismissible: false,
-          enableDrag: false,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          builder: (ctx) => Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.upgrade_rounded, size: 54, color: AppColors.saffronDark),
-                const SizedBox(height: 12),
-                const Text('A fresh update of My Sadhna is ready.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                const Text('Tap below to download and update directly.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      final uri = Uri.parse(kVercelApkDownloadUrl);
-                      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                    child: const Text('Update Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    } catch (_) {}
-  }
-
-  @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
@@ -963,7 +823,7 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
             children: [
               const Text('Hare Krishna! 🙏', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
               const SizedBox(height: 6),
-              const Text('Please select your assigned preacher before accessing the sadhana tracker.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+              const Text('Please set your details and assigned counselor before entering.', style: TextStyle(color: Colors.grey, fontSize: 14)),
               const SizedBox(height: 24),
               TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Devotee / Full Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person))),
               const SizedBox(height: 16),
@@ -989,7 +849,7 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _saveDetails,
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
-                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('Continue to App', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('Continue to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -1101,7 +961,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 700;
-    final isHi = appLanguage.value == 'hi';
 
     return Scaffold(
       body: Center(
@@ -1118,23 +977,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: ActionChip(
-                    backgroundColor: AppColors.creamBg,
-                    avatar: const Icon(Icons.language, size: 16, color: AppColors.saffronDark),
-                    label: Text(isHi ? 'EN' : 'हिन्दी', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      appLanguage.value = isHi ? 'en' : 'hi';
-                    },
-                  ),
-                ),
                 const SizedBox(height: 8),
-                const MSMonogramLogo(size: 64).animate().scale(duration: 400.ms),
-                const SizedBox(height: 16),
-                Text('My Sadhna', style: GoogleFonts.cinzel(fontSize: 26, fontWeight: FontWeight.bold)),
-                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: const TextStyle(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600)),
+                const Text('My Sadhna', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                const Text('Daily Sadhana & Sukriti Tracker', style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 24),
                 Container(
                   decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
@@ -1147,7 +992,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(color: !_isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text(AppStrings.tr('register_tab'), style: TextStyle(fontWeight: FontWeight.bold, color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text('Register', style: TextStyle(fontWeight: FontWeight.bold, color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -1158,7 +1003,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(color: _isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text(AppStrings.tr('signin_tab'), style: TextStyle(fontWeight: FontWeight.bold, color: _isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text('Sign In', style: TextStyle(fontWeight: FontWeight.bold, color: _isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -1169,14 +1014,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 if (_isLoginMode) ...[
                   TextFormField(
                     controller: _emailController,
-                    decoration: InputDecoration(labelText: AppStrings.tr('email_label'), prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                    decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscureLoginPassword,
                     decoration: InputDecoration(
-                      labelText: AppStrings.tr('password_label'),
+                      labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
                       suffixIcon: IconButton(
                         icon: Icon(_obscureLoginPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
@@ -1192,17 +1037,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       key: _formKeyStep0,
                       child: Column(
                         children: [
-                          TextFormField(controller: _nameController, decoration: InputDecoration(labelText: AppStrings.tr('name_label'), prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _nameController, decoration: InputDecoration(labelText: 'Full / Initiated Name', prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _phoneController, decoration: InputDecoration(labelText: AppStrings.tr('phone_label'), prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _emailController, decoration: InputDecoration(labelText: AppStrings.tr('email_label'), prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _emailController, decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscureRegisterPassword,
                             decoration: InputDecoration(
-                              labelText: AppStrings.tr('create_password_label'),
+                              labelText: 'Password (6+ chars)',
                               prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
                               suffixIcon: IconButton(icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted), onPressed: () => setState(() => _obscureRegisterPassword = !_obscureRegisterPassword)),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
@@ -1220,7 +1065,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
                             child: ListTile(
                               leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-                              title: Text(_selectedDob == null ? AppStrings.tr('dob_label') : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
+                              title: Text(_selectedDob == null ? 'Date of Birth (DOB)' : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
                               trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
                               onTap: () async {
                                 final picked = await showDatePicker(context: context, initialDate: DateTime(2000, 1, 1), firstDate: DateTime(1940), lastDate: DateTime.now());
@@ -1229,18 +1074,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _professionController, decoration: InputDecoration(labelText: AppStrings.tr('profession_label'), prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _professionController, decoration: InputDecoration(labelText: 'Profession', prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _educationController, decoration: InputDecoration(labelText: AppStrings.tr('education_label'), prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _educationController, decoration: InputDecoration(labelText: 'Qualification', prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _addressController, decoration: InputDecoration(labelText: AppStrings.tr('address_label'), prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(controller: _addressController, decoration: InputDecoration(labelText: 'City / Address', prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                         ],
                       ),
                     )
                   else
                     DropdownButtonFormField<String>(
                       initialValue: _selectedPreacherId,
-                      decoration: InputDecoration(labelText: AppStrings.tr('assigned_preacher'), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
+                      decoration: InputDecoration(labelText: 'Assigned Preacher', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
                       items: _preachersList.map((p) => DropdownMenuItem<String>(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
                       onChanged: (val) => setState(() => _selectedPreacherId = val),
                     ),
@@ -1262,7 +1107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         }
                       }
                     },
-                    child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(_isLoginMode ? AppStrings.tr('signin_tab') : (_currentStep < 2 ? AppStrings.tr('next_step') : AppStrings.tr('complete_registration')), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(_isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step' : 'Complete Registration'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1273,7 +1118,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   onPressed: _isLoading ? null : _handleGoogleSignIn,
                 ),
                 if (!_isLoginMode && _currentStep > 0)
-                  TextButton(onPressed: () => setState(() => _currentStep--), child: Text(AppStrings.tr('back_step'), style: const TextStyle(color: AppColors.textMuted))),
+                  TextButton(onPressed: () => setState(() => _currentStep--), child: const Text('Back to previous step', style: TextStyle(color: AppColors.textMuted))),
               ],
             ),
           ),
@@ -1300,21 +1145,6 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
   void initState() {
     super.initState();
     _checkRoleAndProfile();
-    _initFcm();
-  }
-
-  Future<void> _initFcm() async {
-    try {
-      final messaging = FirebaseMessaging.instance;
-      final settings = await messaging.requestPermission();
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        final token = await messaging.getToken();
-        final user = supabase.auth.currentUser;
-        if (token != null && user != null) {
-          await supabase.from('profiles').update({'fcm_token': token}).eq('id', user.id);
-        }
-      }
-    } catch (_) {}
   }
 
   Future<void> _checkRoleAndProfile() async {
@@ -1359,10 +1189,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(userRole: _userRole),
         ProfileDashboardScreen(userRole: _userRole),
       ];
-      destinations = [
-        const NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin'),
-        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
-        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
+      destinations = const [
+        NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin'),
+        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
+        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
       ];
     } else if (isPreacher) {
       screens = [
@@ -1370,10 +1200,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(userRole: _userRole),
         ProfileDashboardScreen(userRole: _userRole),
       ];
-      destinations = [
-        const NavigationDestination(icon: Icon(Icons.temple_hindu_outlined), selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
-        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
-        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
+      destinations = const [
+        NavigationDestination(icon: Icon(Icons.temple_hindu_outlined), selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
+        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
+        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
       ];
     } else {
       screens = [
@@ -1381,10 +1211,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         LeaderboardScreen(userRole: _userRole),
         ProfileDashboardScreen(userRole: _userRole),
       ];
-      destinations = [
-        NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home, color: AppColors.saffronDark), label: AppStrings.tr('home')),
-        NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events, color: AppColors.saffronDark), label: AppStrings.tr('standings')),
-        NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
+      destinations = const [
+        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: AppColors.saffronDark), label: 'Home'),
+        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
+        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
       ];
     }
 
@@ -1410,48 +1240,16 @@ class DevoteeSelfDashboardScreen extends StatefulWidget {
 
 class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen> {
   late Future<PersonalStats> _statsFuture;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _refreshStats();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
-      if (results.any((r) => r != ConnectivityResult.none)) {
-        _syncPendingOfflineEntries();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _connectivitySubscription?.cancel();
-    super.dispose();
   }
 
   void _refreshStats() {
     final user = supabase.auth.currentUser;
     setState(() => _statsFuture = _fetchPersonalStats(user?.id));
-  }
-
-  Future<void> _syncPendingOfflineEntries() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final pendingRaw = prefs.getStringList('pending_sadhana_queue') ?? [];
-      if (pendingRaw.isEmpty) return;
-
-      final List<String> unSynced = [];
-      for (final item in pendingRaw) {
-        try {
-          final Map<String, dynamic> data = jsonDecode(item);
-          await supabase.from('sadhana_entries').upsert(data, onConflict: 'user_id, entry_date');
-        } catch (_) {
-          unSynced.add(item);
-        }
-      }
-      await prefs.setStringList('pending_sadhana_queue', unSynced);
-      if (mounted) _refreshStats();
-    } catch (_) {}
   }
 
   Future<PersonalStats> _fetchPersonalStats(String? userId) async {
@@ -1470,7 +1268,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           .select('id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score, is_streak_freeze')
           .eq('user_id', userId)
           .order('entry_date', ascending: false)
-          .limit(60);
+          .limit(30);
 
       final List<dynamic> raw = (res as List<dynamic>?) ?? [];
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -1503,13 +1301,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         }
       }
 
-      String? note;
-      try {
-        final currentMonthStr = DateFormat('yyyy-MM').format(DateTime.now());
-        final noteRes = await supabase.from('counselor_notes').select('note_text').eq('devotee_id', userId).eq('month_year', currentMonthStr).maybeSingle();
-        note = noteRes?['note_text']?.toString();
-      } catch (_) {}
-
       return PersonalStats(
         totalSP: total,
         avgSP: entries.isEmpty ? 0 : total / entries.length,
@@ -1520,7 +1311,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         hasLoggedToday: todayRecord != null,
         todayEntry: todayRecord,
         recent: entries,
-        counselorNote: note,
         counselorTitle: pTitle,
         counselorId: pId,
         avatarBadge: badge,
@@ -1552,7 +1342,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.tulsiGreen,
-            content: Text(isWakeUp ? '🌅 Wake-up confirmed ($timeStr)! Pranam.' : '🌙 Bedtime recorded ($timeStr). Good night!'),
+            content: Text(isWakeUp ? '🌅 Wake-up logged ($timeStr)' : '🌙 Bedtime logged ($timeStr)'),
           ),
         );
         _refreshStats();
@@ -1584,7 +1374,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(AppStrings.tr('calendar_heatmap'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('Monthly Sadhana Heatmap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Text(monthName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.saffronDark)),
             ],
           ),
@@ -1633,7 +1423,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.tr('journey_title')),
+        title: const Text('My Sadhna Journey'),
         actions: [
           ..._buildCommonAppBarActions(context, widget.userRole),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
@@ -1648,6 +1438,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
               if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
 
+              final mantrasCount = stats.totalRounds * 108;
+
               return ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 children: [
@@ -1657,7 +1449,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.saffronDark), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                           icon: const Icon(Icons.wb_sunny, color: AppColors.saffronDark, size: 18),
-                          label: Text(AppStrings.tr('woke_up_now'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                          label: const Text('Woke up now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                           onPressed: () => _quickTimestampWakeOrSleep(true),
                         ),
                       ),
@@ -1666,7 +1458,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.tulsiGreen), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                           icon: const Icon(Icons.bedtime, color: AppColors.tulsiGreen, size: 18),
-                          label: Text(AppStrings.tr('sleeping_now'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
+                          label: const Text('Sleeping now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
                           onPressed: () => _quickTimestampWakeOrSleep(false),
                         ),
                       ),
@@ -1682,10 +1474,10 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(AppStrings.tr('accumulated_sp'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+                        const Text('ACCUMULATED SUKRITI POINTS', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 6),
-                        Text(stats.totalSP.toStringAsFixed(0), style: GoogleFonts.outfit(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
-                        Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Active', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        Text(stats.totalSP.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
+                        Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)', style: const TextStyle(color: Colors.white, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -1709,8 +1501,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(stats.hasLoggedToday ? AppStrings.tr('today_offered') : AppStrings.tr('today_pending'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : AppStrings.tr('log_before_midnight'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                              Text(stats.hasLoggedToday ? "Today's Sadhana Offered" : "Today's Sadhana Pending", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : 'Log before midnight to earn Sukriti Points', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                             ],
                           ),
                         ),
@@ -1720,7 +1512,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
                             if (result == true) _refreshStats();
                           },
-                          child: Text(stats.hasLoggedToday ? AppStrings.tr('edit_log') : AppStrings.tr('submit')),
+                          child: Text(stats.hasLoggedToday ? 'Edit Log' : 'Submit'),
                         ),
                       ],
                     ),
@@ -1761,12 +1553,12 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                 children: const [
                                   Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
                                   SizedBox(width: 6),
-                                  Text('Total Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                  Text('30-Day Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
                                 ],
                               ),
                               const SizedBox(height: 8),
                               Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                              Text('${(stats.totalRounds * 108).toString()} Mantras', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                              Text('${formatIndianNumber(mantrasCount)} Mantras', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                             ],
                           ),
                         ),
@@ -1890,7 +1682,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
       await supabase.from('sadhana_entries').upsert(payload, onConflict: 'user_id, entry_date');
       if (mounted) {
         HapticFeedback.mediumImpact();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text('Hari Bol! Daily Sadhana offering recorded successfully.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text('Sadhana offering recorded successfully!')));
         Navigator.pop(context, true);
       }
     } catch (_) {
@@ -1939,52 +1731,60 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isYesterday = DateUtils.isSameDay(_selectedDate, DateTime.now().subtract(const Duration(days: 1)));
+    final now = DateTime.now();
+    final yest = now.subtract(const Duration(days: 1));
+    final bool isYesterday = DateUtils.isSameDay(_selectedDate, yest);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existingRecord != null ? 'Edit Sadhana Record' : AppStrings.tr('record_sadhana'))),
+      appBar: AppBar(title: Text(widget.existingRecord != null ? 'Edit Sadhana Record' : 'Record Daily Sadhana')),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 600),
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Today (आज)'),
-                    selected: !isYesterday,
-                    onSelected: (val) {
-                      setState(() => _selectedDate = DateTime.now());
-                      _loadExistingOfferingForDate(DateTime.now());
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  ChoiceChip(
-                    label: const Text('Yesterday (कल)'),
-                    selected: isYesterday,
-                    onSelected: (val) {
-                      final yest = DateTime.now().subtract(const Duration(days: 1));
-                      setState(() => _selectedDate = yest);
-                      _loadExistingOfferingForDate(yest);
-                    },
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Text('Today (${DateFormat('dd MMM').format(now)})'),
+                        selected: !isYesterday,
+                        onSelected: (val) {
+                          setState(() => _selectedDate = now);
+                          _loadExistingOfferingForDate(now);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Text('Yesterday (${DateFormat('dd MMM').format(yest)})'),
+                        selected: isYesterday,
+                        onSelected: (val) {
+                          setState(() => _selectedDate = yest);
+                          _loadExistingOfferingForDate(yest);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               _buildSliderStepperCard(title: 'Japa Meditation Rounds', value: _rounds, min: 0, max: 64, step: 1, unit: 'rounds', onChanged: (v) => setState(() => _rounds = v)),
-              _buildSliderStepperCard(title: AppStrings.tr('sp_reading'), value: _spReadingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spReadingMinutes = v)),
-              _buildSliderStepperCard(title: AppStrings.tr('sp_hearing'), value: _spLectureMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spLectureMinutes = v)),
-              _buildSliderStepperCard(title: AppStrings.tr('other_hearing'), value: _otherHearingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _otherHearingMinutes = v)),
-              _buildSliderStepperCard(title: AppStrings.tr('shlokas'), value: _shlokasMemorized, min: 0, max: 20, step: 1, unit: 'verses', onChanged: (v) => setState(() => _shlokasMemorized = v)),
+              _buildSliderStepperCard(title: 'SP Book Reading', value: _spReadingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spReadingMinutes = v)),
+              _buildSliderStepperCard(title: 'SP Lecture Hearing', value: _spLectureMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spLectureMinutes = v)),
+              _buildSliderStepperCard(title: 'Other Spiritual Hearing', value: _otherHearingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _otherHearingMinutes = v)),
+              _buildSliderStepperCard(title: 'Shlokas Memorized Today', value: _shlokasMemorized, min: 0, max: 20, step: 1, unit: 'verses', onChanged: (v) => setState(() => _shlokasMemorized = v)),
               const SizedBox(height: 20),
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
                   onPressed: _isSaving ? null : _submitDailySadhana,
-                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : AppStrings.tr('submit'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : 'Submit Offering', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -2029,7 +1829,6 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     try {
       final devoteesCount = await supabase.from('profiles').count(CountOption.exact);
       final preachersCount = await supabase.from('preachers').count(CountOption.exact);
-      final entriesCount = await supabase.from('sadhana_entries').count(CountOption.exact);
 
       final pRes = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').order('created_at', ascending: false);
       final pList = (pRes as List<dynamic>).map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
@@ -2059,19 +1858,19 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
         );
       }).toList();
 
-      return AdminStats(devotees: devoteesCount, preachers: preachersCount, entries: entriesCount, devoteesList: dList, preachersList: pList);
+      return AdminStats(devotees: devoteesCount, preachers: preachersCount, devoteesList: dList, preachersList: pList);
     } catch (_) {
-      return const AdminStats(devotees: 0, preachers: 0, entries: 0, devoteesList: [], preachersList: []);
+      return const AdminStats(devotees: 0, preachers: 0, devoteesList: [], preachersList: []);
     }
   }
 
-  void _showAddPreacherDialog() {
-    final titleCtrl = TextEditingController();
-    final suffixCtrl = TextEditingController();
+  void _showAddOrEditPreacherDialog([PreacherItem? existing]) {
+    final titleCtrl = TextEditingController(text: existing?.displayTitle ?? '');
+    final suffixCtrl = TextEditingController(text: existing?.codeSuffix ?? '');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add New Preacher'),
+        title: Text(existing != null ? 'Edit Preacher Circle' : 'Add Preacher Circle'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2088,14 +1887,88 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
               final title = titleCtrl.text.trim();
               final suffix = suffixCtrl.text.trim();
               if (title.isNotEmpty && suffix.isNotEmpty) {
-                await supabase.from('preachers').insert({'display_title': title, 'code_suffix': suffix, 'is_active': true});
+                if (existing != null) {
+                  await supabase.from('preachers').update({'display_title': title, 'code_suffix': suffix}).eq('id', existing.id);
+                } else {
+                  await supabase.from('preachers').insert({'display_title': title, 'code_suffix': suffix, 'is_active': true});
+                }
                 if (ctx.mounted) Navigator.pop(ctx);
                 _refresh();
               }
             },
-            child: const Text('Add Preacher'),
+            child: Text(existing != null ? 'Save Changes' : 'Add Circle'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
+    final nameCtrl = TextEditingController(text: devotee.fullName);
+    final phoneCtrl = TextEditingController(text: devotee.phoneNumber);
+    final badgeCtrl = TextEditingController(text: devotee.avatarBadge);
+    String selectedRole = devotee.role;
+    String? selectedPreacher = devotee.preacherId;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          title: Text('Edit Devotee: ${devotee.fullName}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Badge / Emblem (e.g. 📿, 🌟, 🎖️)', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedRole,
+                  decoration: const InputDecoration(labelText: 'Assigned Role', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'counselee', child: Text('Counselee')),
+                    DropdownMenuItem(value: 'preacher', child: Text('Preacher')),
+                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setDlgState(() => selectedRole = val);
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPreacher,
+                  decoration: const InputDecoration(labelText: 'Counselor Circle', border: OutlineInputBorder()),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('None / General')),
+                    ...preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))),
+                  ],
+                  onChanged: (val) => setDlgState(() => selectedPreacher = val),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+              onPressed: () async {
+                await supabase.from('profiles').update({
+                  'full_name': nameCtrl.text.trim(),
+                  'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  'avatar_badge': badgeCtrl.text.trim().isEmpty ? '📿' : badgeCtrl.text.trim(),
+                  'role': selectedRole,
+                  'preacher_id': selectedPreacher,
+                }).eq('id', devotee.id);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _refresh();
+              },
+              child: const Text('Save Details'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2123,7 +1996,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
         future: _adminFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          final stats = snapshot.data ?? const AdminStats(devotees: 0, preachers: 0, entries: 0, devoteesList: [], preachersList: []);
+          final stats = snapshot.data ?? const AdminStats(devotees: 0, preachers: 0, devoteesList: [], preachersList: []);
 
           final filteredDevotees = stats.devoteesList.where((d) {
             if (_searchFilter.isEmpty) return true;
@@ -2140,46 +2013,37 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   Row(
                     children: [
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Devotees', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                              const SizedBox(height: 4),
-                              Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
-                            ],
+                        child: InkWell(
+                          onTap: () => _tabController.animateTo(0),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.saffronPrimary, width: 1.5)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Devotees (Tap to View)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                const SizedBox(height: 4),
+                                Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Preachers', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                              const SizedBox(height: 4),
-                              Text('${stats.preachers}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Total Logs', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                              const SizedBox(height: 4),
-                              Text('${stats.entries}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFD97706))),
-                            ],
+                        child: InkWell(
+                          onTap: () => _tabController.animateTo(1),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.tulsiGreen, width: 1.5)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Preachers (Tap to View)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                const SizedBox(height: 4),
+                                Text('${stats.preachers}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -2187,24 +2051,24 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   ),
                   const SizedBox(height: 16),
                   TextField(
-                    decoration: InputDecoration(hintText: 'Search devotees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                    decoration: InputDecoration(hintText: 'Search devotees by name, email, phone...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                     onChanged: (val) => setState(() => _searchFilter = val.trim()),
                   ),
                   const SizedBox(height: 14),
                   ...filteredDevotees.map((d) => Card(
                     child: ListTile(
-                      title: Text('${d.fullName} ${d.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Preacher: ${d.preacherTitle}'),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (newRole) async {
-                          await supabase.from('profiles').update({'role': newRole}).eq('id', d.id);
-                          _refresh();
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'counselee', child: Text('Set as Counselee')),
-                          PopupMenuItem(value: 'preacher', child: Text('Set as Preacher')),
-                          PopupMenuItem(value: 'admin', child: Text('Set as Admin')),
+                      title: Row(
+                        children: [
+                          Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
                         ],
+                      ),
+                      subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Circle: ${d.preacherTitle}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 28),
+                        tooltip: 'Edit Devotee Details',
+                        onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
                       ),
                     ),
                   )),
@@ -2217,20 +2081,26 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Preacher / Counselor Circle'),
-                    onPressed: _showAddPreacherDialog,
+                    onPressed: () => _showAddOrEditPreacherDialog(),
                   ),
                   const SizedBox(height: 16),
                   ...stats.preachersList.map((p) => Card(
                     child: ListTile(
                       leading: CircleAvatar(backgroundColor: p.isActive ? AppColors.tulsiGreen : Colors.grey, foregroundColor: Colors.white, child: Text(p.codeSuffix)),
                       title: Text(p.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Status: ${p.isActive ? "Active Circle" : "Inactive"}'),
-                      trailing: Switch(
-                        value: p.isActive,
-                        onChanged: (val) async {
-                          await supabase.from('preachers').update({'is_active': val}).eq('id', p.id);
-                          _refresh();
-                        },
+                      subtitle: Text('Status: ${p.isActive ? "Active" : "Inactive"}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _showAddOrEditPreacherDialog(p)),
+                          Switch(
+                            value: p.isActive,
+                            onChanged: (val) async {
+                              await supabase.from('preachers').update({'is_active': val}).eq('id', p.id);
+                              _refresh();
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   )),
@@ -2341,7 +2211,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 ...filtered.map((c) => Card(
                   child: ListTile(
                     title: Text('${c.fullName} ${c.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest: ${c.latestEntryDate ?? "No entries yet"}'),
+                    subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}'),
                   ),
                 )),
               ],
@@ -2360,36 +2230,38 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   String _periodType = 'weekly';
-  bool _filterMyCircleOnly = false;
-  String? _myCounselorId;
+  String? _selectedPreacherId;
+  List<PreacherItem> _preachers = [];
+  bool _hideMyName = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchMyCounselorId();
+    _fetchPreachersAndProfile();
   }
 
-  Future<void> _fetchMyCounselorId() async {
+  Future<void> _fetchPreachersAndProfile() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final res = await supabase.from('profiles').select('preacher_id').eq('id', user.id).single();
-        setState(() => _myCounselorId = res['preacher_id']?.toString());
+        final p = await supabase.from('profiles').select('hide_name_on_leaderboard').eq('id', user.id).maybeSingle();
+        if (p != null) setState(() => _hideMyName = p['hide_name_on_leaderboard'] == true);
       } catch (_) {}
     }
+    try {
+      final res = await supabase.from('preachers').select().eq('is_active', true);
+      setState(() => _preachers = (res as List<dynamic>).map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList());
+    } catch (_) {}
   }
 
   Future<List<RankingItem>> _fetchTopRankings() async {
     try {
-      final res = await supabase.rpc('get_top_rankings', params: {'p_period_type': _periodType});
+      final res = await supabase.rpc('get_top_rankings', params: {
+        'p_period_type': _periodType,
+        'p_preacher_id': _selectedPreacherId,
+      });
       final List<dynamic> data = (res as List<dynamic>?) ?? [];
-      final list = data.map((e) => RankingItem.fromMap(e as Map<String, dynamic>)).toList();
-
-      if (!_filterMyCircleOnly) return list;
-      if (_myCounselorId != null && _myCounselorId!.isNotEmpty) {
-        return list.where((item) => item.preacherId == _myCounselorId).toList();
-      }
-      return list;
+      return data.map((e) => RankingItem.fromMap(e as Map<String, dynamic>)).toList();
     } catch (_) {
       return [];
     }
@@ -2399,7 +2271,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.tr('top_rankings')),
+        title: const Text('Top Rankings'),
         actions: _buildCommonAppBarActions(context, widget.userRole),
       ),
       body: Center(
@@ -2413,19 +2285,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   children: [
                     Expanded(
                       child: SegmentedButton<String>(
-                        segments: [
-                          ButtonSegment(value: 'weekly', label: Text(AppStrings.tr('weekly_top'))),
-                          ButtonSegment(value: 'monthly', label: Text(AppStrings.tr('monthly_top'))),
+                        segments: const [
+                          ButtonSegment(value: 'weekly', label: Text('Weekly')),
+                          ButtonSegment(value: 'monthly', label: Text('Monthly')),
                         ],
                         selected: {_periodType},
                         onSelectionChanged: (val) => setState(() => _periodType = val.first),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    FilterChip(
-                      selected: _filterMyCircleOnly,
-                      label: Text(_filterMyCircleOnly ? 'My Circle' : 'All Circles'),
-                      onSelected: (val) => setState(() => _filterMyCircleOnly = val),
+                    DropdownButton<String?>(
+                      value: _selectedPreacherId,
+                      hint: const Text('Global'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('All Circles (Global)')),
+                        ..._preachers.map((p) => DropdownMenuItem(value: p.id, child: Text(p.codeSuffix))),
+                      ],
+                      onChanged: (val) => setState(() => _selectedPreacherId = val),
                     ),
                   ],
                 ),
@@ -2436,7 +2312,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                     final rankings = snapshot.data ?? [];
-                    if (rankings.isEmpty) return const Center(child: Text('No sadhana offerings logged yet.', style: TextStyle(color: AppColors.textMuted)));
+                    if (rankings.isEmpty) return const Center(child: Text('No sadhana offerings logged yet.'));
 
                     return ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2445,6 +2321,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       itemBuilder: (context, index) {
                         final item = rankings[index];
                         return ListTile(
+                          tileColor: item.isCurrentUser ? AppColors.saffronPrimary.withValues(alpha: 0.12) : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           leading: CircleAvatar(
                             backgroundColor: item.rank == 1 ? AppColors.goldAccent : (item.rank == 2 ? const Color(0xFFC0C0C0) : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
                             foregroundColor: item.rank <= 3 ? Colors.white : Colors.black87,
@@ -2457,7 +2335,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
                             ],
                           ),
-                          subtitle: Text('${item.totalRounds} Rounds • ${item.preacherTitle}'),
+                          subtitle: Text('Circle: ${item.preacherSuffix} • ${item.totalRounds} Rounds'),
                           trailing: Text('${item.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
                         );
                       },
@@ -2465,40 +2343,29 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   },
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: AppColors.borderSubtle))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Hide My Full Name on Leaderboard', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Switch(
+                      value: _hideMyName,
+                      onChanged: (val) async {
+                        setState(() => _hideMyName = val);
+                        final user = supabase.auth.currentUser;
+                        if (user != null) {
+                          await supabase.from('profiles').update({'hide_name_on_leaderboard': val}).eq('id', user.id);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class WebApkDownloadBanner extends StatelessWidget {
-  const WebApkDownloadBanner({super.key});
-
-  void _triggerDownload(BuildContext context) async {
-    final apkUri = Uri.base.resolve('downloads/my_sadhna.apk');
-    await launchUrl(apkUri, mode: LaunchMode.externalApplication);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!kIsWeb) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-      child: Row(
-        children: [
-          const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
-          const SizedBox(width: 14),
-          const Expanded(child: Text('Get the Android App for offline tracking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
-            onPressed: () => _triggerDownload(context),
-            child: const Text('Download APK'),
-          ),
-        ],
       ),
     );
   }
@@ -2534,6 +2401,101 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  void _showAdminSecurityModal() {
+    final emailCtrl = TextEditingController(text: supabase.auth.currentUser?.email ?? '');
+    final passCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Admin Credentials'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Admin Email', border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'New Password (6+ chars)', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+            onPressed: () async {
+              try {
+                if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != supabase.auth.currentUser?.email) {
+                  await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
+                }
+                if (passCtrl.text.trim().isNotEmpty) {
+                  await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
+                }
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
+                }
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCounseleeEditModal() async {
+    final nameCtrl = TextEditingController(text: _profileData?['full_name'] ?? '');
+    final phoneCtrl = TextEditingController(text: _profileData?['phone_number'] ?? '');
+    final profCtrl = TextEditingController(text: _profileData?['profession'] ?? '');
+    final eduCtrl = TextEditingController(text: _profileData?['education'] ?? '');
+    final addrCtrl = TextEditingController(text: _profileData?['address'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profile Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+            onPressed: () async {
+              final user = supabase.auth.currentUser;
+              if (user != null) {
+                await supabase.from('profiles').update({
+                  'full_name': nameCtrl.text.trim(),
+                  'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                  'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                  'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                }).eq('id', user.id);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _fetchProfile();
+              }
+            },
+            child: const Text('Save Details'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -2541,11 +2503,10 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
 
     final bool isSuperAdmin = widget.userRole == 'super_admin' || widget.userRole == 'admin';
     final pr = _profileData?['preachers'] as Map<String, dynamic>?;
-    final currentBadge = _profileData?['avatar_badge']?.toString() ?? '📿';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.tr('profile')),
+        title: const Text('Profile'),
         actions: _buildCommonAppBarActions(context, widget.userRole),
       ),
       body: Center(
@@ -2554,23 +2515,26 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           padding: const EdgeInsets.all(24),
           child: ListView(
             children: [
-              const Center(child: MSMonogramLogo(size: 80)),
-              const SizedBox(height: 16),
               Center(
                 child: Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ),
               Center(child: Text(user?.email ?? '', style: const TextStyle(color: AppColors.textMuted, fontSize: 14))),
               const SizedBox(height: 20),
-              Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      ListTile(title: const Text('Emblem Badge'), trailing: Text(currentBadge, style: const TextStyle(fontSize: 20))),
-                      if (!isSuperAdmin) ...[
-                        const Divider(),
-                        ListTile(title: const Text('Date of Birth'), trailing: Text(_profileData?['date_of_birth'] ?? 'Not set')),
+              if (isSuperAdmin) ...[
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  icon: const Icon(Icons.security),
+                  label: const Text('Change Admin Email / Password'),
+                  onPressed: _showAdminSecurityModal,
+                ),
+              ] else ...[
+                Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        ListTile(title: const Text('Emblem Badge'), trailing: Text(_profileData?['avatar_badge']?.toString() ?? '📿', style: const TextStyle(fontSize: 20))),
                         const Divider(),
                         ListTile(title: const Text('Phone'), trailing: Text(_profileData?['phone_number'] ?? 'Not set')),
                         const Divider(),
@@ -2578,15 +2542,20 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                         const Divider(),
                         ListTile(title: const Text('Address'), trailing: Text(_profileData?['address'] ?? 'Not set')),
                         const Divider(),
-                        ListTile(title: const Text('Preacher'), trailing: Text(pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None')),
+                        ListTile(title: const Text('Preacher Circle'), trailing: Text(pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None')),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const WebApkDownloadBanner(),
-              const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit My Profile Details'),
+                  onPressed: _showCounseleeEditModal,
+                ),
+              ],
+              const SizedBox(height: 20),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14)),
                 onPressed: () async => await supabase.auth.signOut(),
@@ -2595,7 +2564,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.12 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.13 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
