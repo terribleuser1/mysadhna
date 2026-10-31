@@ -16,9 +16,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 // ============================================================================
-// 1. DATA MODELS & GLOBAL CONFIGURATION
+// 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 5; // v1.0.4+5
+const int kCurrentInstalledVersionCode = 6; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -511,7 +511,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // ============================================================================
-// 5. ONBOARDING & REGISTRATION (With Date of Birth Picker)
+// 5. ONBOARDING & REGISTRATION (With Google Sign-In)
 // ============================================================================
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -900,7 +900,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 // ============================================================================
-// 6. MAIN NAVIGATION SCAFFOLD
+// 6. MAIN NAVIGATION SCAFFOLD (With Mandatory Profile Completion Check)
 // ============================================================================
 class MainNavigationScaffold extends StatefulWidget {
   const MainNavigationScaffold({super.key});
@@ -917,22 +917,48 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
   @override
   void initState() {
     super.initState();
-    _checkRole();
+    _checkRoleAndProfile();
   }
 
-  Future<void> _checkRole() async {
+  Future<void> _checkRoleAndProfile() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final profile = await supabase.from('profiles').select('role').eq('id', user.id).single();
-        setState(() {
-          _userRole = profile['role']?.toString() ?? 'counselee';
-          _isLoading = false;
-        });
-        return;
+        final profile = await supabase.from('profiles').select('role, preacher_id, date_of_birth, phone_number').eq('id', user.id).maybeSingle();
+        if (profile != null) {
+          setState(() {
+            _userRole = profile['role']?.toString() ?? 'counselee';
+            _isLoading = false;
+          });
+
+          // If signing in via Google and missing preacher or DOB, prompt immediately
+          if (profile['preacher_id'] == null || profile['date_of_birth'] == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _showMandatoryCompletionSheet(user.id);
+            });
+          }
+          return;
+        }
       } catch (_) {}
     }
     setState(() => _isLoading = false);
+  }
+
+  void _showMandatoryCompletionSheet(String userId) {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => _MandatoryProfileForm(
+        userId: userId,
+        onCompleted: () {
+          Navigator.pop(ctx);
+          setState(() {});
+        },
+      ),
+    );
   }
 
   @override
@@ -989,6 +1015,131 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
         indicatorColor: AppColors.saffronPrimary.withValues(alpha: 0.2),
         destinations: destinations,
+      ),
+    );
+  }
+}
+
+class _MandatoryProfileForm extends StatefulWidget {
+  final String userId;
+  final VoidCallback onCompleted;
+  const _MandatoryProfileForm({required this.userId, required this.onCompleted});
+
+  @override
+  State<_MandatoryProfileForm> createState() => _MandatoryProfileFormState();
+}
+
+class _MandatoryProfileFormState extends State<_MandatoryProfileForm> {
+  final _phoneCtrl = TextEditingController();
+  DateTime? _dob;
+  String? _preacherId;
+  List<PreacherItem> _preachers = [];
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreachers();
+  }
+
+  Future<void> _loadPreachers() async {
+    try {
+      final res = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
+      final list = (res as List<dynamic>).map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
+      setState(() {
+        _preachers = list;
+        if (_preachers.isNotEmpty) _preacherId = _preachers.first.id;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _submit() async {
+    if (_preacherId == null || _dob == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Please select your assigned Preacher and Date of Birth.')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await supabase.from('profiles').update({
+        'preacher_id': _preacherId,
+        'date_of_birth': DateFormat('yyyy-MM-dd').format(_dob!),
+        'phone_number': _phoneCtrl.text.trim(),
+      }).eq('id', widget.userId);
+
+      widget.onCompleted();
+    } catch (_) {
+      setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        top: 24,
+        left: 24,
+        right: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(child: MSMonogramLogo(size: 50)),
+          const SizedBox(height: 12),
+          const Center(
+            child: Text('Complete Your Devotee Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ),
+          const SizedBox(height: 6),
+          const Center(
+            child: Text('Connect with your Bhakti Vriksha counselor to start tracking sadhana.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          ),
+          const SizedBox(height: 20),
+          DropdownButtonFormField<String>(
+            value: _preacherId,
+            decoration: InputDecoration(labelText: 'Assigned Preacher / Counselor', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+            items: _preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+            onChanged: (val) => setState(() => _preacherId = val),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
+            child: ListTile(
+              leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
+              title: Text(_dob == null ? 'Select Date of Birth' : DateFormat('dd MMMM yyyy').format(_dob!)),
+              trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime(2000, 1, 1),
+                  firstDate: DateTime(1940),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) setState(() => _dob = picked);
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'WhatsApp Phone Number',
+              prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              onPressed: _saving ? null : _submit,
+              child: _saving ? const CircularProgressIndicator(color: Colors.white) : const Text('Save & Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2776,7 +2927,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
 }
 
 // ============================================================================
-// 11. TOP RANKINGS SCREEN (Circle Filter & Badges)
+// 11. TOP RANKINGS SCREEN (Clean All/Circle Filter)
 // ============================================================================
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -2809,14 +2960,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Future<List<RankingItem>> _fetchTopRankings() async {
     try {
       final res = await supabase.rpc('get_top_rankings', params: {'p_period_type': _periodType});
-      final List<dynamic> data = res as List<dynamic>;
+      final List<dynamic> data = (res as List<dynamic>?) ?? [];
       final list = data.map((e) => RankingItem.fromMap(e as Map<String, dynamic>)).toList();
 
-      if (_filterMyCircleOnly && _myCounselorId != null) {
+      if (!_filterMyCircleOnly) {
+        return list;
+      }
+
+      if (_myCounselorId != null && _myCounselorId!.isNotEmpty) {
         return list.where((item) => item.preacherId == _myCounselorId).toList();
       }
       return list;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Leaderboard error: $e');
       return [];
     }
   }
@@ -3041,7 +3197,7 @@ class WebApkDownloadBanner extends StatelessWidget {
 }
 
 // ============================================================================
-// 13. PROFILE & SETTINGS (Tap to edit DOB directly for existing profiles)
+// 13. PROFILE & SETTINGS (Interactive Birthday & Tilak Badge Selection)
 // ============================================================================
 class ProfileDashboardScreen extends StatefulWidget {
   const ProfileDashboardScreen({super.key});
