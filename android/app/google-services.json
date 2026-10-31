@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "475101859574",
+    "project_id": "my-sadhna1",
+    "storage_bucket": "my-sadhna1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:475101859574:android:281291849b9003b84c66d7",
+        "android_client_info": {
+          "package_name": "com.example.my_sadhna"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvJT7pEG-mqSysP5DE7PH3lWb15RVTHO8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

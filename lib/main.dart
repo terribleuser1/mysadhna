@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -14,6 +16,11 @@ import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
 
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
@@ -212,7 +219,7 @@ class RankingItem {
     required this.avatarBadge,
   });
 
-  factory RankingItem.fromMap(Map<String, dynamic> map) {
+    factory RankingItem.fromMap(Map<String, dynamic> map) {
     return RankingItem(
       rank: int.tryParse(map['rank']?.toString() ?? '1') ?? 1,
       userId: map['user_id']?.toString() ?? '',
@@ -314,6 +321,12 @@ class AppStrings {
 // ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('Firebase init error: $e');
+  }
 
   await Supabase.initialize(
     url: 'https://mtduhncyvcmzgekekieq.supabase.co',
