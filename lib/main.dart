@@ -18,7 +18,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 // ============================================================================
 // 1. DATA MODELS & CONFIGURATION
 // ============================================================================
-const int kCurrentInstalledVersionCode = 8; // v1.0.4+6
+const int kCurrentInstalledVersionCode = 9; // v1.0.4+6
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
 
 class PreacherItem {
@@ -195,6 +195,7 @@ class RankingItem {
   final String? preacherId;
   final String preacherTitle;
   final double totalSp;
+  double get totalSP => totalSp;
   final int totalRounds;
   final bool isCurrentUser;
   final String avatarBadge;
@@ -2415,7 +2416,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
 
               SwitchListTile(
                 value: _isStreakFreeze,
-                activeColor: AppColors.saffronDark,
+                activeThumbColor: AppColors.saffronDark,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
                 title: Text(AppStrings.tr('streak_freeze'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: const Text('Preserves your active streak while unwell or on pilgrimage.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
@@ -2849,7 +2850,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                             Expanded(
                               child: ListView.separated(
                                 itemCount: records.length,
-                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                separatorBuilder: (_, _) => const Divider(height: 1),
                                 itemBuilder: (context, idx) {
                                   final rec = records[idx] as Map<String, dynamic>;
                                   final wake = rec['wake_up_time']?.toString() ?? '';
@@ -3053,7 +3054,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     return ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: rankings.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = rankings[index];
                         return ListTile(
