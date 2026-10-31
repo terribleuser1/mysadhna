@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -10,210 +8,36 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-
-// ==========================================
-// PUSH NOTIFICATION BROADCAST CONTROLLER
-// ==========================================
-
-class NotificationBroadcastDialog extends StatefulWidget {
-  final bool isAdmin;
-  final String? preacherId;
-  const NotificationBroadcastDialog({Key? key, required this.isAdmin, this.preacherId}) : super(key: key);
-
-  @override
-  State<NotificationBroadcastDialog> createState() => _NotificationBroadcastDialogState();
-}
-
-class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialog> {
-  final _titleController = TextEditingController();
-  final _bodyController = TextEditingController();
-  String _selectedTarget = 'preacher_counsellees';
-  bool _isSending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isAdmin) {
-      _selectedTarget = 'all';
-    } else {
-      _selectedTarget = 'preacher_counsellees';
-    }
-  }
-
-  Future<void> _sendNotification() async {
-    final title = _titleController.text.trim();
-    final body = _bodyController.text.trim();
-
-    if (title.isEmpty || body.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter both title and message')),
-      );
-      return;
-    }
-
-    setState(() => _isSending = true);
-
-    try {
-      // 1. Fetch recipient tokens from Supabase RPC
-      final res = await Supabase.instance.client.rpc(
-        'get_broadcast_tokens',
-        params: {
-          'p_target_group': _selectedTarget,
-          'p_target_preacher_id': widget.preacherId,
-        },
-      ) as List<dynamic>;
-
-      final tokens = res
-          .map((e) => e['fcm_token']?.toString())
-          .where((t) => t != null && t.isNotEmpty)
-          .cast<String>()
-          .toSet()
-          .toList();
-
-      if (tokens.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No registered devices found in this group')),
-        );
-        setState(() => _isSending = false);
-        return;
-      }
-
-      // 2. Log broadcast in Supabase
-      await Supabase.instance.client.from('notification_broadcasts').insert({
-        'sender_id': Supabase.instance.client.auth.currentUser?.id,
-        'target_group': _selectedTarget,
-        'target_preacher_id': widget.preacherId,
-        'title': title,
-        'body': body,
-        'recipient_count': tokens.length,
-      });
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Dispatched to ${tokens.length} devotees! (Token sync logged)'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: const [
-          Icon(Icons.campaign, color: Color(0xFFD97706)),
-          SizedBox(width: 8),
-          Text('Broadcast Notification', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.isAdmin) ...[
-              const Text('Audience Group:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                value: _selectedTarget,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All Users & Devotees')),
-                  DropdownMenuItem(value: 'all_preachers', child: Text('All Preachers Only')),
-                  DropdownMenuItem(value: 'all_counsellees', child: Text('All Counsellees (General)')),
-                  DropdownMenuItem(value: 'preacher_counsellees', child: Text('My Counsellees Only')),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedTarget = val);
-                },
-              ),
-              const SizedBox(height: 14),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Audience: All Devotees in Your Circle',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title (e.g. Mangala Arati / Class Reminder)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _bodyController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Message Body',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isSending ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isSending ? null : _sendNotification,
-          icon: _isSending
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.send, size: 16),
-          label: Text(_isSending ? 'Sending...' : 'Send Broadcast'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFD97706),
-            foregroundColor: Colors.white,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-// ============================================================================
-// 1. DATA MODELS & CONFIGURATION
-// ============================================================================
-const int kCurrentInstalledVersionCode = 18; // v1.0.4+6
-const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/app.apk';
+const int kCurrentInstalledVersionCode = 19;
+const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
+
+final supabase = Supabase.instance.client;
+final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
+
+class AppColors {
+  static const Color saffronPrimary = Color(0xFFFF9933);
+  static const Color saffronDark = Color(0xFFC04B00);
+  static const Color goldAccent = Color(0xFFD97706);
+  static const Color tulsiGreen = Color(0xFF1B4332);
+  static const Color tulsiSoft = Color(0xFF2D6A4F);
+  static const Color creamBg = Color(0xFFFAF9F6);
+  static const Color cardBg = Colors.white;
+  static const Color textDark = Color(0xFF1F1A17);
+  static const Color textMuted = Color(0xFF6B5E55);
+  static const Color sacredRed = Color(0xFF991B1B);
+  static const Color borderSubtle = Color(0xFFE2D9D0);
+}
 
 class PreacherItem {
   final String id;
@@ -315,22 +139,6 @@ class DailyLogData {
     this.isStreakFreeze = false,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'entry_date': entryDate,
-      'wake_up_time': wakeUpTime,
-      'bed_time': bedTime,
-      'chanting_rounds': chantingRounds,
-      'sp_book_reading_minutes': spBookReadingMinutes,
-      'sp_lecture_hearing_minutes': spLectureMinutes,
-      'other_hearing_minutes': otherHearingMinutes,
-      'shlokas_memorized': shlokasMemorized,
-      'calculated_score': calculatedScore,
-      'is_streak_freeze': isStreakFreeze,
-    };
-  }
-
   factory DailyLogData.fromMap(Map<String, dynamic> map) {
     return DailyLogData(
       id: map['id']?.toString() ?? '',
@@ -406,7 +214,7 @@ class RankingItem {
     required this.avatarBadge,
   });
 
-    factory RankingItem.fromMap(Map<String, dynamic> map) {
+  factory RankingItem.fromMap(Map<String, dynamic> map) {
     return RankingItem(
       rank: int.tryParse(map['rank']?.toString() ?? '1') ?? 1,
       userId: map['user_id']?.toString() ?? '',
@@ -420,26 +228,6 @@ class RankingItem {
     );
   }
 }
-
-class SacredBadge {
-  final String titleEn;
-  final String titleHi;
-  final String descEn;
-  final String descHi;
-  final String icon;
-  final bool isUnlocked;
-
-  const SacredBadge({
-    required this.titleEn,
-    required this.titleHi,
-    required this.descEn,
-    required this.descHi,
-    required this.icon,
-    required this.isUnlocked,
-  });
-}
-
-final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
 class AppStrings {
   static String tr(String key) {
@@ -457,7 +245,6 @@ class AppStrings {
       case 'japa_rounds': return isHi ? 'जप माला संख्या' : 'Total Japa Rounds';
       case 'active_streak': return isHi ? 'निरंतर साधना' : 'Active Streak';
       case 'sacred_badges': return isHi ? 'साधना उपलब्धियां एवं बैज' : 'Sacred Milestones & Badges';
-      case 'export_pdf': return isHi ? 'मासिक साधना पत्रक (PDF)' : 'Monthly Sadhana Card (PDF)';
       case 'recent_offerings': return isHi ? 'हालिया समर्पण इतिहास' : 'Recent Offerings';
       case 'record_sadhana': return isHi ? 'दैनिक साधना दर्ज करें' : 'Record Daily Sadhana';
       case 'top_rankings': return isHi ? 'शीर्ष साधक तालिका' : 'Top Rankings';
@@ -465,7 +252,6 @@ class AppStrings {
       case 'monthly_top': return isHi ? 'मासिक' : 'Monthly';
       case 'all_counselors': return isHi ? 'समस्त साधक' : 'All Circles';
       case 'my_counselor_only': return isHi ? 'मेरी भक्ति वृक्ष मंडली' : 'My Counselor Group';
-      case 'your_standing': return isHi ? 'आपकी वर्तमान स्थिति' : 'YOUR CURRENT STANDING';
       case 'wake_time': return isHi ? 'जागरण समय' : 'Wake-up Time';
       case 'bed_time': return isHi ? 'शयन समय' : 'Bedtime';
       case 'sp_reading': return isHi ? 'प्रभुपाद ग्रंथ अध्ययन' : 'SP Book Reading';
@@ -480,8 +266,6 @@ class AppStrings {
       case 'woke_up_now': return isHi ? 'अभी जागे (प्रणाम)' : 'Woke up just now (Pranam)';
       case 'sleeping_now': return isHi ? 'शयन समय' : 'Sleeping now';
       case 'streak_freeze': return isHi ? 'यात्रा / अस्वस्थ (Pass)' : 'Travel / Unwell Pass';
-      case 'bhakti_wrapped': return isHi ? 'वार्षिक साधना सार (Wrapped)' : 'Bhakti Wrapped Summary';
-      case 'nistha_trend': return isHi ? 'निष्ठा एवं साधना तुलना' : 'Nistha Spiritual Growth Trend';
       case 'register_tab': return isHi ? 'पंजीकरण' : 'Register';
       case 'signin_tab': return isHi ? 'लॉग इन' : 'Sign In';
       case 'email_label': return isHi ? 'ईमेल पता' : 'Email Address';
@@ -489,7 +273,6 @@ class AppStrings {
       case 'name_label': return isHi ? 'पूरा / दीक्षित नाम' : 'Full / Initiated Name';
       case 'phone_label': return isHi ? 'व्हाट्सएप फोन नंबर' : 'WhatsApp Phone Number';
       case 'create_password_label': return isHi ? 'पासवर्ड बनाएं (6+ अक्षर)' : 'Create Password (6+ chars)';
-      case 'remember_password_tip': return isHi ? '💡 टिप: कृपया अपना पासवर्ड सुरक्षित रखें या कहीं नोट कर लें।' : '💡 Tip: Please remember or write down your password safely.';
       case 'dob_label': return isHi ? 'जन्म तिथि (DOB)' : 'Date of Birth (DOB)';
       case 'profession_label': return isHi ? 'व्यवसाय / पेशा' : 'Profession';
       case 'education_label': return isHi ? 'योग्यता / शिक्षा' : 'Qualification';
@@ -503,9 +286,6 @@ class AppStrings {
   }
 }
 
-// ============================================================================
-// 2. ENTRY POINT & THEME CONSTANTS
-// ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -517,26 +297,10 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://mtduhncyvcmzgekekieq.supabase.co',
-    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
   );
 
   runApp(const MySadhnaApp());
-}
-
-final supabase = Supabase.instance.client;
-
-class AppColors {
-  static const Color saffronPrimary = Color(0xFFFF9933);
-  static const Color saffronDark = Color(0xFFC04B00);
-  static const Color goldAccent = Color(0xFFD97706);
-  static const Color tulsiGreen = Color(0xFF1B4332);
-  static const Color tulsiSoft = Color(0xFF2D6A4F);
-  static const Color creamBg = Color(0xFFFAF9F6);
-  static const Color cardBg = Colors.white;
-  static const Color textDark = Color(0xFF1F1A17);
-  static const Color textMuted = Color(0xFF6B5E55);
-  static const Color sacredRed = Color(0xFF991B1B);
-  static const Color borderSubtle = Color(0xFFE2D9D0);
 }
 
 class MySadhnaApp extends StatelessWidget {
@@ -563,11 +327,7 @@ class MySadhnaApp extends StatelessWidget {
               backgroundColor: AppColors.creamBg,
               elevation: 0,
               centerTitle: true,
-              titleTextStyle: TextStyle(
-                color: AppColors.textDark,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              titleTextStyle: TextStyle(color: AppColors.textDark, fontSize: 19, fontWeight: FontWeight.bold),
               iconTheme: IconThemeData(color: AppColors.textDark),
             ),
           ),
@@ -578,9 +338,6 @@ class MySadhnaApp extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 3. LOGO & BRANDING
-// ============================================================================
 class MSMonogramLogo extends StatelessWidget {
   final double size;
   const MSMonogramLogo({super.key, this.size = 56});
@@ -620,9 +377,422 @@ class MSMonogramLogo extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 4. AUTH GATE & APP-ONLY IN-APP UPDATE ENGINE
-// ============================================================================
+class NotificationBellIcon extends StatefulWidget {
+  const NotificationBellIcon({super.key});
+
+  @override
+  State<NotificationBellIcon> createState() => _NotificationBellIconState();
+}
+
+class _NotificationBellIconState extends State<NotificationBellIcon> {
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkNotifications();
+  }
+
+  Future<void> _checkNotifications() async {
+    try {
+      final res = await supabase.rpc('get_user_notification_feed');
+      if (mounted && res is List) setState(() => _unreadCount = res.length);
+    } catch (_) {}
+  }
+
+  void _openInbox() {
+    setState(() => _unreadCount = 0);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const NotificationInboxSheet(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_rounded, size: 26),
+          tooltip: 'Noticeboard & Notifications',
+          onPressed: _openInbox,
+        ),
+        if (_unreadCount > 0)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                _unreadCount > 9 ? '9+' : '$_unreadCount',
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class NotificationInboxSheet extends StatefulWidget {
+  const NotificationInboxSheet({super.key});
+
+  @override
+  State<NotificationInboxSheet> createState() => _NotificationInboxSheetState();
+}
+
+class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
+  late Future<List<dynamic>> _feedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedFuture = _loadFeed();
+  }
+
+  Future<List<dynamic>> _loadFeed() async {
+    try {
+      final res = await supabase.rpc('get_user_notification_feed');
+      return (res as List<dynamic>?) ?? [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 6),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.campaign, color: Color(0xFFD97706)),
+                    SizedBox(width: 8),
+                    Text('Announcements & Notices', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: FutureBuilder<List<dynamic>>(
+              future: _feedFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final list = snapshot.data ?? [];
+                if (list.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.notifications_off_outlined, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('No announcements right now.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = list[index];
+                    final title = item['title']?.toString() ?? 'Notice';
+                    final body = item['body']?.toString() ?? '';
+                    final sender = item['sender_name']?.toString() ?? 'Admin';
+                    final dateStr = item['created_at']?.toString() ?? '';
+                    String displayDate = '';
+                    if (dateStr.isNotEmpty) {
+                      try {
+                        final dt = DateTime.parse(dateStr).toLocal();
+                        displayDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                      } catch (_) {
+                        displayDate = dateStr;
+                      }
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E))),
+                              ),
+                              Text(displayDate, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(body, style: const TextStyle(fontSize: 14, color: Colors.black87)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.person_pin, size: 14, color: Color(0xFFD97706)),
+                              const SizedBox(width: 4),
+                              Text(sender, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF78350F))),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class NotificationBroadcastDialog extends StatefulWidget {
+  final bool isAdmin;
+  final String? preacherId;
+  const NotificationBroadcastDialog({super.key, required this.isAdmin, this.preacherId});
+
+  @override
+  State<NotificationBroadcastDialog> createState() => _NotificationBroadcastDialogState();
+}
+
+class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialog> {
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+  String _selectedTarget = 'all';
+  String? _selectedPreacherId;
+  List<dynamic> _preachersList = [];
+  bool _isLoadingPreachers = false;
+  bool _isSending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isAdmin) {
+      _selectedTarget = 'all';
+      _loadPreachersList();
+    } else {
+      _selectedTarget = 'my_counsellees';
+    }
+  }
+
+  Future<void> _loadPreachersList() async {
+    setState(() => _isLoadingPreachers = true);
+    try {
+      final res = await supabase.from('profiles').select('id, full_name').eq('role', 'preacher').order('full_name');
+      if (mounted) {
+        setState(() {
+          _preachersList = (res as List<dynamic>?) ?? [];
+          if (_preachersList.isNotEmpty) {
+            _selectedPreacherId = _preachersList.first['id']?.toString();
+          }
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoadingPreachers = false);
+  }
+
+  Future<void> _sendNotification() async {
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter both title and message')));
+      return;
+    }
+
+    if (widget.isAdmin && _selectedTarget == 'specific_preacher_counsellees' && _selectedPreacherId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a preacher')));
+      return;
+    }
+
+    setState(() => _isSending = true);
+
+    try {
+      final targetPreacherId = widget.isAdmin
+          ? (_selectedTarget == 'specific_preacher_counsellees' ? _selectedPreacherId : widget.preacherId)
+          : supabase.auth.currentUser?.id;
+
+      final res = await supabase.rpc(
+        'get_broadcast_tokens',
+        params: {
+          'p_target_group': _selectedTarget,
+          'p_target_preacher_id': targetPreacherId,
+        },
+      );
+
+      final tokens = (res as List<dynamic>?)
+              ?.map((e) => e['fcm_token']?.toString())
+              .where((t) => t != null && t.isNotEmpty)
+              .cast<String>()
+              .toSet()
+              .toList() ?? [];
+
+      await supabase.from('notification_broadcasts').insert({
+        'sender_id': supabase.auth.currentUser?.id,
+        'target_group': _selectedTarget,
+        'target_preacher_id': targetPreacherId,
+        'title': title,
+        'body': body,
+        'recipient_count': tokens.length,
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Broadcast saved and dispatched to noticeboards! (${tokens.length} active device push sent)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.campaign, color: Color(0xFFD97706)),
+          SizedBox(width: 8),
+          Text('Broadcast Notice', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.isAdmin) ...[
+              const Text('Target Audience:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedTarget,
+                isExpanded: true,
+                decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('1. All Users (Entire App)')),
+                  DropdownMenuItem(value: 'all_preachers', child: Text('2. All Preachers Only')),
+                  DropdownMenuItem(value: 'all_counsellees', child: Text('3. All Counselees Across Circles')),
+                  DropdownMenuItem(value: 'specific_preacher_counsellees', child: Text('4. Counselees of One Preacher')),
+                  DropdownMenuItem(value: 'my_counsellees', child: Text('5. My Own Circle Devotees')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedTarget = val);
+                },
+              ),
+              if (_selectedTarget == 'specific_preacher_counsellees') ...[
+                const SizedBox(height: 12),
+                const Text('Choose Preacher:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                _isLoadingPreachers
+                    ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
+                    : DropdownButtonFormField<String>(
+                        initialValue: _selectedPreacherId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        items: _preachersList.map((p) => DropdownMenuItem<String>(value: p['id'].toString(), child: Text(p['full_name']?.toString() ?? 'Preacher'))).toList(),
+                        onChanged: (val) => setState(() => _selectedPreacherId = val),
+                      ),
+              ],
+              const SizedBox(height: 14),
+            ] else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
+                child: const Text('Audience: All Devotees in Your Circle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF92400E))),
+              ),
+              const SizedBox(height: 14),
+            ],
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(labelText: 'Notice Title', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bodyController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Notice Message', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _isSending ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton.icon(
+          onPressed: _isSending ? null : _sendNotification,
+          icon: _isSending
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.send, size: 16),
+          label: Text(_isSending ? 'Sending...' : 'Send'),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
+        ),
+      ],
+    );
+  }
+}
+
+List<Widget> _buildCommonAppBarActions(BuildContext context, String currentRole) {
+  final isPrivileged = currentRole == 'admin' || currentRole == 'super_admin' || currentRole == 'preacher';
+  return [
+    const NotificationBellIcon(),
+    if (isPrivileged)
+      IconButton(
+        icon: const Icon(Icons.campaign_outlined),
+        tooltip: 'Send Push Notification',
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => NotificationBroadcastDialog(
+              isAdmin: currentRole == 'admin' || currentRole == 'super_admin',
+              preacherId: supabase.auth.currentUser?.id,
+            ),
+          );
+        },
+      ),
+  ];
+}
+
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -657,33 +827,19 @@ class _AuthGateState extends State<AuthGate> {
               children: [
                 const Icon(Icons.upgrade_rounded, size: 54, color: AppColors.saffronDark),
                 const SizedBox(height: 12),
-                const Text(
-                  'A fresh update of My Sadhna is ready with smoother performance.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, height: 1.4),
-                ),
+                const Text('A fresh update of My Sadhna is ready.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                const Text(
-                  'Tap below to update directly. Your recorded daily sadhana remains safe.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-                ),
+                const Text('Tap below to download and update directly.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.tulsiGreen,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
                     onPressed: () async {
                       Navigator.pop(ctx);
                       final uri = Uri.parse(kVercelApkDownloadUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
+                      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                     },
                     child: const Text('Update Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
@@ -711,9 +867,139 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-// ============================================================================
-// 5. ONBOARDING & REGISTRATION (With Google Sign-In)
-// ============================================================================
+class OnboardingDetailsScreen extends StatefulWidget {
+  final VoidCallback onCompleted;
+  const OnboardingDetailsScreen({super.key, required this.onCompleted});
+
+  @override
+  State<OnboardingDetailsScreen> createState() => _OnboardingDetailsScreenState();
+}
+
+class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _professionController = TextEditingController();
+  final _addressController = TextEditingController();
+  String? _selectedPreacherId;
+  List<dynamic> _preachers = [];
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final profile = await supabase.from('profiles').select('full_name, phone_number, profession, address, preacher_id').eq('id', user.id).maybeSingle();
+        if (profile != null) {
+          _nameController.text = profile['full_name']?.toString() ?? user.userMetadata?['name'] ?? '';
+          _phoneController.text = profile['phone_number']?.toString() ?? '';
+          _professionController.text = profile['profession']?.toString() ?? '';
+          _addressController.text = profile['address']?.toString() ?? '';
+          _selectedPreacherId = profile['preacher_id']?.toString();
+        }
+      }
+
+      final pRes = await supabase.from('preachers').select('id, display_title, code_suffix').eq('is_active', true);
+      setState(() {
+        _preachers = (pRes as List<dynamic>?) ?? [];
+        if (_selectedPreacherId == null && _preachers.isNotEmpty) {
+          _selectedPreacherId = _preachers.first['id'].toString();
+        }
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveDetails() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your full name')));
+      return;
+    }
+    if (_selectedPreacherId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your assigned preacher')));
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final uid = supabase.auth.currentUser!.id;
+      await supabase.from('profiles').update({
+        'full_name': name,
+        'phone_number': _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        'profession': _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
+        'address': _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+        'preacher_id': _selectedPreacherId,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', uid);
+
+      widget.onCompleted();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Complete Your Profile'), automaticallyImplyLeading: false),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Hare Krishna! 🙏', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
+              const SizedBox(height: 6),
+              const Text('Please select your assigned preacher before accessing the sadhana tracker.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+              const SizedBox(height: 24),
+              TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Devotee / Full Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person))),
+              const SizedBox(height: 16),
+              const Text('Assigned Preacher / Counselor *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedPreacherId,
+                isExpanded: true,
+                decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.temple_hindu)),
+                items: _preachers.map((p) => DropdownMenuItem<String>(value: p['id'].toString(), child: Text('${p['display_title']} (${p['code_suffix']})'))).toList(),
+                onChanged: (val) => setState(() => _selectedPreacherId = val),
+              ),
+              const SizedBox(height: 16),
+              TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone Number (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone))),
+              const SizedBox(height: 16),
+              TextField(controller: _professionController, decoration: const InputDecoration(labelText: 'Profession (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.work_outline))),
+              const SizedBox(height: 16),
+              TextField(controller: _addressController, decoration: const InputDecoration(labelText: 'City / Address (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on_outlined))),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveDetails,
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
+                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('Continue to App', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -753,17 +1039,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _fetchPreachers() async {
     try {
-      final response = await supabase
-          .from('preachers')
-          .select('id, code_suffix, display_title, is_active')
-          .eq('is_active', true);
-
+      final response = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
       final List<dynamic> raw = response as List<dynamic>;
       setState(() {
         _preachersList = raw.map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
-        if (_preachersList.isNotEmpty) {
-          _selectedPreacherId = _preachersList.first.id;
-        }
+        if (_preachersList.isNotEmpty) _selectedPreacherId = _preachersList.first.id;
       });
     } catch (_) {}
   }
@@ -771,16 +1051,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _handleGoogleSignIn() async {
     try {
       setState(() => _isLoading = true);
-      await supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: kIsWeb ? null : 'mysadhna://login-callback',
-      );
+      await supabase.auth.signInWithOAuth(OAuthProvider.google, redirectTo: kIsWeb ? null : 'mysadhna://login-callback');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -796,7 +1069,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         await supabase.auth.signInWithPassword(email: email, password: password);
       } else {
         if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
-
         final authRes = await supabase.auth.signUp(email: email, password: password);
         final userId = authRes.user?.id;
         if (userId != null) {
@@ -819,11 +1091,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -844,9 +1112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))],
             ),
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -856,12 +1122,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   alignment: Alignment.topRight,
                   child: ActionChip(
                     backgroundColor: AppColors.creamBg,
-                    side: const BorderSide(color: AppColors.borderSubtle),
                     avatar: const Icon(Icons.language, size: 16, color: AppColors.saffronDark),
-                    label: Text(
-                      isHi ? 'EN' : 'हिन्दी',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark),
-                    ),
+                    label: Text(isHi ? 'EN' : 'हिन्दी', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     onPressed: () {
                       HapticFeedback.selectionClick();
                       appLanguage.value = isHi ? 'en' : 'hi';
@@ -871,8 +1133,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 8),
                 const MSMonogramLogo(size: 64).animate().scale(duration: 400.ms),
                 const SizedBox(height: 16),
-                Text('My Sadhna', style: GoogleFonts.cinzel(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: const TextStyle(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
+                Text('My Sadhna', style: GoogleFonts.cinzel(fontSize: 26, fontWeight: FontWeight.bold)),
+                Text(isHi ? 'दैनिक साधना एवं सुकृति ट्रैकर' : 'Daily Sadhana & Sukriti Tracker', style: const TextStyle(fontSize: 13, color: AppColors.saffronDark, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 24),
                 Container(
                   decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
@@ -907,11 +1169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 if (_isLoginMode) ...[
                   TextFormField(
                     controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: AppStrings.tr('email_label'),
-                      prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
+                    decoration: InputDecoration(labelText: AppStrings.tr('email_label'), prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -934,32 +1192,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       key: _formKeyStep0,
                       child: Column(
                         children: [
-                          TextFormField(
-                            controller: _nameController,
-                            decoration: InputDecoration(
-                              labelText: AppStrings.tr('name_label'),
-                              prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
+                          TextFormField(controller: _nameController, decoration: InputDecoration(labelText: AppStrings.tr('name_label'), prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _phoneController,
-                            decoration: InputDecoration(
-                              labelText: AppStrings.tr('phone_label'),
-                              prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
+                          TextFormField(controller: _phoneController, decoration: InputDecoration(labelText: AppStrings.tr('phone_label'), prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _emailController,
-                            decoration: InputDecoration(
-                              labelText: AppStrings.tr('email_label'),
-                              prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
+                          TextFormField(controller: _emailController, decoration: InputDecoration(labelText: AppStrings.tr('email_label'), prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _passwordController,
@@ -967,19 +1204,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             decoration: InputDecoration(
                               labelText: AppStrings.tr('create_password_label'),
                               prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
-                                onPressed: () => setState(() => _obscureRegisterPassword = !_obscureRegisterPassword),
-                              ),
+                              suffixIcon: IconButton(icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted), onPressed: () => setState(() => _obscureRegisterPassword = !_obscureRegisterPassword)),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Text(
-                              AppStrings.tr('remember_password_tip'),
-                              style: const TextStyle(fontSize: 11, color: AppColors.saffronDark, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -994,57 +1220,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
                             child: ListTile(
                               leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-                              title: Text(
-                                _selectedDob == null
-                                    ? AppStrings.tr('dob_label')
-                                    : '${DateFormat('dd MMMM yyyy').format(_selectedDob!)}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: _selectedDob == null ? FontWeight.normal : FontWeight.bold,
-                                  color: _selectedDob == null ? AppColors.textMuted : AppColors.textDark,
-                                ),
-                              ),
+                              title: Text(_selectedDob == null ? AppStrings.tr('dob_label') : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
                               trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
                               onTap: () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: DateTime(2000, 1, 1),
-                                  firstDate: DateTime(1940),
-                                  lastDate: DateTime.now(),
-                                );
-                                if (picked != null) {
-                                  setState(() => _selectedDob = picked);
-                                }
+                                final picked = await showDatePicker(context: context, initialDate: DateTime(2000, 1, 1), firstDate: DateTime(1940), lastDate: DateTime.now());
+                                if (picked != null) setState(() => _selectedDob = picked);
                               },
                             ),
                           ),
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _professionController,
-                            decoration: InputDecoration(labelText: AppStrings.tr('profession_label'), prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-                          ),
+                          TextFormField(controller: _professionController, decoration: InputDecoration(labelText: AppStrings.tr('profession_label'), prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _educationController,
-                            decoration: InputDecoration(labelText: AppStrings.tr('education_label'), prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-                          ),
+                          TextFormField(controller: _educationController, decoration: InputDecoration(labelText: AppStrings.tr('education_label'), prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _addressController,
-                            decoration: InputDecoration(labelText: AppStrings.tr('address_label'), prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-                          ),
+                          TextFormField(controller: _addressController, decoration: InputDecoration(labelText: AppStrings.tr('address_label'), prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                         ],
                       ),
                     )
                   else
                     DropdownButtonFormField<String>(
                       initialValue: _selectedPreacherId,
-                      decoration: InputDecoration(
-                        labelText: AppStrings.tr('assigned_preacher'),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark),
-                      ),
-                      items: _preachersList.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+                      decoration: InputDecoration(labelText: AppStrings.tr('assigned_preacher'), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
+                      items: _preachersList.map((p) => DropdownMenuItem<String>(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
                       onChanged: (val) => setState(() => _selectedPreacherId = val),
                     ),
                 ],
@@ -1053,7 +1250,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary),
                     onPressed: _isLoading ? null : () {
                       if (_isLoginMode) {
                         _handleAuth();
@@ -1065,32 +1262,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         }
                       }
                     },
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            _isLoginMode
-                                ? AppStrings.tr('signin_tab')
-                                : (_currentStep < 2 ? AppStrings.tr('next_step') : AppStrings.tr('complete_registration')),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
+                    child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(_isLoginMode ? AppStrings.tr('signin_tab') : (_currentStep < 2 ? AppStrings.tr('next_step') : AppStrings.tr('complete_registration')), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 46),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    side: const BorderSide(color: AppColors.borderSubtle),
-                  ),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                   icon: const Icon(Icons.account_circle, color: AppColors.saffronDark),
                   label: const Text('One-Tap Google Sign-In', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
                   onPressed: _isLoading ? null : _handleGoogleSignIn,
                 ),
                 if (!_isLoginMode && _currentStep > 0)
-                  TextButton(
-                    onPressed: () => setState(() => _currentStep--),
-                    child: Text(AppStrings.tr('back_step'), style: const TextStyle(color: AppColors.textMuted)),
-                  ),
+                  TextButton(onPressed: () => setState(() => _currentStep--), child: Text(AppStrings.tr('back_step'), style: const TextStyle(color: AppColors.textMuted))),
               ],
             ),
           ),
@@ -1100,9 +1283,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// ============================================================================
-// 6. MAIN NAVIGATION SCAFFOLD (With Mandatory Profile Completion Check)
-// ============================================================================
 class MainNavigationScaffold extends StatefulWidget {
   const MainNavigationScaffold({super.key});
 
@@ -1114,30 +1294,42 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
   int _currentIndex = 0;
   String _userRole = 'counselee';
   bool _isLoading = true;
+  bool _needsOnboarding = false;
 
   @override
   void initState() {
     super.initState();
     _checkRoleAndProfile();
+    _initFcm();
+  }
+
+  Future<void> _initFcm() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission();
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        final token = await messaging.getToken();
+        final user = supabase.auth.currentUser;
+        if (token != null && user != null) {
+          await supabase.from('profiles').update({'fcm_token': token}).eq('id', user.id);
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkRoleAndProfile() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final profile = await supabase.from('profiles').select('role, preacher_id, date_of_birth, phone_number').eq('id', user.id).maybeSingle();
+        final profile = await supabase.from('profiles').select('role, preacher_id').eq('id', user.id).maybeSingle();
         if (profile != null) {
+          final role = profile['role']?.toString() ?? 'counselee';
+          final pId = profile['preacher_id']?.toString();
           setState(() {
-            _userRole = profile['role']?.toString() ?? 'counselee';
+            _userRole = role;
+            _needsOnboarding = (role == 'counselee' && (pId == null || pId.isEmpty));
             _isLoading = false;
           });
-
-          // If signing in via Google and missing preacher or DOB, prompt immediately
-          if (profile['preacher_id'] == null || profile['date_of_birth'] == null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showMandatoryCompletionSheet(user.id);
-            });
-          }
           return;
         }
       } catch (_) {}
@@ -1145,40 +1337,27 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
     setState(() => _isLoading = false);
   }
 
-  void _showMandatoryCompletionSheet(String userId) {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _MandatoryProfileForm(
-        userId: userId,
-        onCompleted: () {
-          Navigator.pop(ctx);
-          setState(() {});
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    if (_needsOnboarding) {
+      return OnboardingDetailsScreen(
+        onCompleted: () => setState(() => _needsOnboarding = false),
+      );
     }
 
-    final bool isSuperAdmin = _userRole == 'super_admin';
+    final bool isSuperAdmin = _userRole == 'super_admin' || _userRole == 'admin';
     final bool isPreacher = _userRole == 'preacher';
 
     List<Widget> screens;
     List<NavigationDestination> destinations;
 
     if (isSuperAdmin) {
-      screens = const [
-        SuperAdminConsoleScreen(),
-        LeaderboardScreen(),
-        ProfileDashboardScreen(),
+      screens = [
+        SuperAdminConsoleScreen(userRole: _userRole),
+        LeaderboardScreen(userRole: _userRole),
+        ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = [
         const NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin'),
@@ -1186,10 +1365,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
       ];
     } else if (isPreacher) {
-      screens = const [
-        PreacherConsoleScreen(),
-        LeaderboardScreen(),
-        ProfileDashboardScreen(),
+      screens = [
+        PreacherConsoleScreen(userRole: _userRole),
+        LeaderboardScreen(userRole: _userRole),
+        ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = [
         const NavigationDestination(icon: Icon(Icons.temple_hindu_outlined), selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
@@ -1197,10 +1376,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person, color: AppColors.saffronDark), label: AppStrings.tr('profile')),
       ];
     } else {
-      screens = const [
-        DevoteeSelfDashboardScreen(),
-        LeaderboardScreen(),
-        ProfileDashboardScreen(),
+      screens = [
+        DevoteeSelfDashboardScreen(userRole: _userRole),
+        LeaderboardScreen(userRole: _userRole),
+        ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = [
         NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home, color: AppColors.saffronDark), label: AppStrings.tr('home')),
@@ -1221,189 +1400,22 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
   }
 }
 
-class _MandatoryProfileForm extends StatefulWidget {
-  final String userId;
-  final VoidCallback onCompleted;
-  const _MandatoryProfileForm({required this.userId, required this.onCompleted});
-
-  @override
-  State<_MandatoryProfileForm> createState() => _MandatoryProfileFormState();
-}
-
-class _MandatoryProfileFormState extends State<_MandatoryProfileForm> {
-  final _phoneCtrl = TextEditingController();
-  final _professionCtrl = TextEditingController();
-  final _educationCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  DateTime? _dob;
-  String? _preacherId;
-  List<PreacherItem> _preachers = [];
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPreachers();
-  }
-
-  Future<void> _loadPreachers() async {
-    try {
-      final res = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
-      final list = (res as List<dynamic>).map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
-      setState(() {
-        _preachers = list;
-        if (_preachers.isNotEmpty) _preacherId = _preachers.first.id;
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _submit() async {
-    if (_preacherId == null || _dob == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Please select your assigned Preacher and Date of Birth.')));
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await supabase.from('profiles').update({
-        'preacher_id': _preacherId,
-        'date_of_birth': DateFormat('yyyy-MM-dd').format(_dob!),
-        'phone_number': _phoneCtrl.text.trim(),
-        'profession': _professionCtrl.text.trim(),
-        'education': _educationCtrl.text.trim(),
-        'address': _addressCtrl.text.trim(),
-      }).eq('id', widget.userId);
-
-      widget.onCompleted();
-    } catch (_) {
-      setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          top: 24,
-          left: 24,
-          right: 24,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(child: MSMonogramLogo(size: 50)),
-            const SizedBox(height: 12),
-            const Center(
-              child: Text('Complete Your Devotee Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
-            const SizedBox(height: 6),
-            const Center(
-              child: Text('Connect with your Bhakti Vriksha counselor to start tracking sadhana.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              value: _preacherId,
-              decoration: InputDecoration(labelText: 'Assigned Preacher / Counselor', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-              items: _preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
-              onChanged: (val) => setState(() => _preacherId = val),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
-              child: ListTile(
-                leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-                title: Text(_dob == null ? 'Select Date of Birth' : DateFormat('dd MMMM yyyy').format(_dob!)),
-                trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime(2000, 1, 1),
-                    firstDate: DateTime(1940),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) setState(() => _dob = picked);
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'WhatsApp Phone Number',
-                prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _professionCtrl,
-              decoration: InputDecoration(
-                labelText: 'Profession',
-                prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _educationCtrl,
-              decoration: InputDecoration(
-                labelText: 'Education',
-                prefixIcon: const Icon(Icons.school_outlined, color: AppColors.saffronDark),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _addressCtrl,
-              decoration: InputDecoration(
-                labelText: 'City / Address',
-                prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                onPressed: _saving ? null : _submit,
-                child: _saving ? const CircularProgressIndicator(color: Colors.white) : const Text('Save & Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// 7. DEVOTEE DASHBOARD (Heatmap, Badges, Nistha Growth & Background Auto-Sync)
-// ============================================================================
 class DevoteeSelfDashboardScreen extends StatefulWidget {
-  const DevoteeSelfDashboardScreen({super.key});
+  final String userRole;
+  const DevoteeSelfDashboardScreen({super.key, required this.userRole});
 
   @override
   State<DevoteeSelfDashboardScreen> createState() => _DevoteeSelfDashboardScreenState();
 }
 
 class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen> {
-  bool _isFlushingOffline = false;
   late Future<PersonalStats> _statsFuture;
-  String _userName = 'Devotee';
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _refreshStats();
-    _syncPendingOfflineEntries();
-
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
       if (results.any((r) => r != ConnectivityResult.none)) {
         _syncPendingOfflineEntries();
@@ -1419,9 +1431,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
   void _refreshStats() {
     final user = supabase.auth.currentUser;
-    setState(() {
-      _statsFuture = _fetchPersonalStats(user?.id);
-    });
+    setState(() => _statsFuture = _fetchPersonalStats(user?.id));
   }
 
   Future<void> _syncPendingOfflineEntries() async {
@@ -1430,9 +1440,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       final pendingRaw = prefs.getStringList('pending_sadhana_queue') ?? [];
       if (pendingRaw.isEmpty) return;
 
-      setState(() => _isFlushingOffline = true);
       final List<String> unSynced = [];
-
       for (final item in pendingRaw) {
         try {
           final Map<String, dynamic> data = jsonDecode(item);
@@ -1441,15 +1449,9 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           unSynced.add(item);
         }
       }
-
       await prefs.setStringList('pending_sadhana_queue', unSynced);
-      if (mounted) {
-        setState(() => _isFlushingOffline = false);
-        _refreshStats();
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isFlushingOffline = false);
-    }
+      if (mounted) _refreshStats();
+    } catch (_) {}
   }
 
   Future<PersonalStats> _fetchPersonalStats(String? userId) async {
@@ -1458,7 +1460,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     }
     try {
       final userProf = await supabase.from('profiles').select('full_name, preacher_id, avatar_badge, date_of_birth, preachers(display_title)').eq('id', userId).single();
-      _userName = userProf['full_name']?.toString() ?? 'Devotee';
       final pTitle = (userProf['preachers'] as Map<String, dynamic>?)?['display_title']?.toString();
       final pId = userProf['preacher_id']?.toString();
       final badge = userProf['avatar_badge']?.toString() ?? '📿';
@@ -1471,7 +1472,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           .order('entry_date', ascending: false)
           .limit(60);
 
-      final List<dynamic> raw = res as List<dynamic>;
+      final List<dynamic> raw = (res as List<dynamic>?) ?? [];
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
       double total = 0;
@@ -1484,17 +1485,12 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         entries.add(data);
         total += data.calculatedScore;
         rounds += data.chantingRounds;
-
-        if (data.entryDate == todayStr) {
-          todayRecord = data;
-        }
+        if (data.entryDate == todayStr) todayRecord = data;
       }
 
       int currentStreak = 0;
       DateTime checkDate = DateTime.now();
-      if (todayRecord == null) {
-        checkDate = checkDate.subtract(const Duration(days: 1));
-      }
+      if (todayRecord == null) checkDate = checkDate.subtract(const Duration(days: 1));
 
       final datesMap = {for (var e in entries) e.entryDate: e};
       while (true) {
@@ -1564,176 +1560,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     } catch (_) {}
   }
 
-  void _showBhaktiWrappedDialog(PersonalStats stats) {
-    int totalReading = 0;
-    for (var e in stats.recent) {
-      totalReading += e.spBookReadingMinutes;
-    }
-    final totalHolyNames = stats.totalRounds * 108 * 16;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const MSMonogramLogo(size: 60),
-            const SizedBox(height: 12),
-            Text('Bhakti Wrapped', style: GoogleFonts.cinzel(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-            Text('Spiritual Journey of $_userName ${stats.avatarBadge}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-            const Divider(height: 24),
-            _wrappedItem('📿 Holy Names Chanted', '${NumberFormat('#,##,###').format(totalHolyNames)} Names'),
-            const SizedBox(height: 10),
-            _wrappedItem('📖 Prabhupada Reading', '${(totalReading / 60).toStringAsFixed(1)} Hours'),
-            const SizedBox(height: 10),
-            _wrappedItem('🌟 Total Sukriti Points', '${stats.totalSP.toStringAsFixed(0)} SP'),
-            const SizedBox(height: 10),
-            _wrappedItem('🔥 Longest Active Streak', '${stats.longestStreak} Consecutive Days'),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Inspiring! Haribol'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _wrappedItem(String title, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderSubtle)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNisthaGrowthCard(List<DailyLogData> entries) {
-    int currentWeekRounds = 0;
-    int prevWeekRounds = 0;
-    int currentWeekMins = 0;
-    int prevWeekMins = 0;
-
-    for (int i = 0; i < entries.length; i++) {
-      if (i < 7) {
-        currentWeekRounds += entries[i].chantingRounds;
-        currentWeekMins += (entries[i].spBookReadingMinutes + entries[i].spLectureMinutes);
-      } else if (i < 14) {
-        prevWeekRounds += entries[i].chantingRounds;
-        prevWeekMins += (entries[i].spBookReadingMinutes + entries[i].spLectureMinutes);
-      }
-    }
-
-    final roundsDiff = currentWeekRounds - prevWeekRounds;
-    final minsDiff = currentWeekMins - prevWeekMins;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.trending_up, color: AppColors.saffronDark, size: 20),
-              const SizedBox(width: 8),
-              Text(AppStrings.tr('nistha_trend'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _nisthaPill('7-Day Japa', '$currentWeekRounds rds', roundsDiff >= 0 ? '+$roundsDiff rds vs last wk' : '$roundsDiff rds vs last wk', roundsDiff >= 0),
-              _nisthaPill('Study & Hearing', '${currentWeekMins}m', minsDiff >= 0 ? '+$minsDiff m vs last wk' : '$minsDiff m vs last wk', minsDiff >= 0),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _nisthaPill(String title, String value, String sub, bool isPositive) {
-    return Column(
-      children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-        const SizedBox(height: 2),
-        Text(sub, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isPositive ? AppColors.tulsiGreen : AppColors.sacredRed)),
-      ],
-    );
-  }
-
-  List<SacredBadge> _evaluateBadges(PersonalStats stats) {
-    int brahmaMuhurtaCount = 0;
-    int totalShlokas = 0;
-    int totalReadingMins = 0;
-
-    for (final e in stats.recent) {
-      try {
-        final parts = e.wakeUpTime.split(':');
-        if (parts.length >= 2) {
-          final hour = int.tryParse(parts[0]) ?? 6;
-          final minute = int.tryParse(parts[1]) ?? 0;
-          if (hour < 4 || (hour == 4 && minute <= 30)) {
-            brahmaMuhurtaCount++;
-          }
-        }
-      } catch (_) {}
-      totalShlokas += e.shlokasMemorized;
-      totalReadingMins += e.spBookReadingMinutes;
-    }
-
-    return [
-      SacredBadge(
-        titleEn: 'Brahma-muhurta Warrior',
-        titleHi: 'ब्रह्म मुहूर्त साधक',
-        descEn: 'Woke up before 4:30 AM for 7+ days',
-        descHi: '7 दिन या अधिक प्रातः 4:30 बजे से पूर्व जागरण',
-        icon: '🌅',
-        isUnlocked: brahmaMuhurtaCount >= 7,
-      ),
-      SacredBadge(
-        titleEn: 'Nishtha Sadhaka',
-        titleHi: 'निष्ठावान साधक',
-        descEn: 'Maintained 7+ days consecutive active sadhana streak',
-        descHi: '7 दिनों तक लगातार नियमित साधना का समर्पण',
-        icon: '🔥',
-        isUnlocked: stats.currentStreak >= 7,
-      ),
-      SacredBadge(
-        titleEn: 'Swadhyaya Ratna',
-        titleHi: 'स्वाध्याय रत्न',
-        descEn: 'Completed 5+ hours of Srila Prabhupada book reading',
-        descHi: 'प्रभुपाद ग्रंथ अध्ययन के 300 मिनट पूर्ण किए',
-        icon: '📖',
-        isUnlocked: totalReadingMins >= 300,
-      ),
-      SacredBadge(
-        titleEn: 'Shloka Smriti',
-        titleHi: 'श्लोक स्मृति',
-        descEn: 'Memorized 3+ sacred verses',
-        descHi: '3 या अधिक पवित्र श्लोक कंठस्थ किए',
-        icon: '📜',
-        isUnlocked: totalShlokas >= 3,
-      ),
-    ];
-  }
-
   Widget _buildHeatmapGrid(List<DailyLogData> entries) {
     final now = DateTime.now();
     final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
@@ -1751,18 +1577,14 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.borderSubtle)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(AppStrings.tr('calendar_heatmap'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark)),
+              Text(AppStrings.tr('calendar_heatmap'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Text(monthName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.saffronDark)),
             ],
           ),
@@ -1793,168 +1615,27 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                 borderCol = const Color(0xFFFCA5A5);
               }
 
-              return Tooltip(
-                message: entry != null ? (entry.isStreakFreeze ? 'Day $dayNum: Travel / Unwell Pass' : 'Day $dayNum: ${entry.calculatedScore.toStringAsFixed(1)} SP (${entry.chantingRounds} rds)') : 'Day $dayNum: No log',
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: cellColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: borderCol, width: 1.2),
-                  ),
-                  child: Text(
-                    '$dayNum',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: entry != null ? AppColors.textDark : Colors.black45,
-                    ),
-                  ),
-                ),
+              return Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: cellColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: borderCol, width: 1.2)),
+                child: Text('$dayNum', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: entry != null ? AppColors.textDark : Colors.black45)),
               );
             }),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _legendDot(const Color(0xFFD1FAE5), 'Full (70+ SP)'),
-              const SizedBox(width: 12),
-              _legendDot(const Color(0xFFFEF3C7), 'Partial'),
-              const SizedBox(width: 12),
-              _legendDot(const Color(0xFFE0F2FE), 'Pass'),
-              const SizedBox(width: 12),
-              _legendDot(const Color(0xFFFEE2E2), 'Missed'),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: Colors.black26))),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-      ],
-    );
-  }
-
-  Future<void> _generatePdfReport(PersonalStats stats) async {
-    final fontBase = await PdfGoogleFonts.outfitRegular();
-    final fontBold = await PdfGoogleFonts.outfitBold();
-
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(base: fontBase, bold: fontBold),
-    );
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(24),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('MY SADHNA - MONTHLY REPORT', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange900)),
-                        pw.Text('Devotee: $_userName ${stats.avatarBadge}', style: const pw.TextStyle(fontSize: 14)),
-                        pw.Text('Date Generated: ${DateFormat('dd MMM yyyy').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      ],
-                    ),
-                    pw.Container(
-                      padding: const pw.EdgeInsets.all(10),
-                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.deepOrange)),
-                      child: pw.Text('${stats.totalSP.toStringAsFixed(0)} SP', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange)),
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 16),
-                pw.Divider(),
-                pw.SizedBox(height: 12),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Total Days Logged: ${stats.count}'),
-                    pw.Text('Total Japa Rounds: ${stats.totalRounds}'),
-                    pw.Text('Active Streak: ${stats.currentStreak} Days'),
-                    pw.Text('Avg SP/Day: ${stats.avgSP.toStringAsFixed(1)}'),
-                  ],
-                ),
-                pw.SizedBox(height: 18),
-                pw.Text('Daily Sadhana Record Breakdown', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 8),
-                pw.TableHelper.fromTextArray(
-                  headers: ['Date', 'Wake', 'Rounds', 'Read (m)', 'Hear (m)', 'Shlokas', 'SP'],
-                  data: stats.recent.take(15).map((e) => [
-                    e.entryDate,
-                    e.wakeUpTime.length >= 5 ? e.wakeUpTime.substring(0, 5) : e.wakeUpTime,
-                    '${e.chantingRounds}',
-                    '${e.spBookReadingMinutes}',
-                    '${e.spLectureMinutes}',
-                    '${e.shlokasMemorized}',
-                    e.calculatedScore.toStringAsFixed(1),
-                  ]).toList(),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.deepOrange800),
-                  cellAlignment: pw.Alignment.centerLeft,
-                ),
-                if (stats.counselorNote != null && stats.counselorNote!.isNotEmpty) ...[
-                  pw.SizedBox(height: 16),
-                  pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(color: PdfColors.amber50, border: pw.Border.all(color: PdfColors.amber800)),
-                    child: pw.Text('Counselor Remarks: "${stats.counselorNote}"', style: pw.TextStyle(fontSize: 11, fontStyle: pw.FontStyle.italic, color: PdfColors.amber900)),
-                  ),
-                ],
-                pw.Spacer(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Column(children: [pw.Container(width: 150, height: 1, color: PdfColors.grey600), pw.SizedBox(height: 4), pw.Text("Devotee's Signature")]),
-                    pw.Column(children: [pw.Container(width: 150, height: 1, color: PdfColors.grey600), pw.SizedBox(height: 4), pw.Text("Counselor's Blessings")]),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isHi = appLanguage.value == 'hi';
-
     return Scaffold(
       appBar: AppBar(
         title: Text(AppStrings.tr('journey_title')),
         actions: [
-          ActionChip(
-            backgroundColor: AppColors.creamBg,
-            side: const BorderSide(color: AppColors.borderSubtle),
-            avatar: const Icon(Icons.language, size: 16, color: AppColors.saffronDark),
-            label: Text(
-              isHi ? 'EN' : 'हिन्दी',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark),
-            ),
-            onPressed: () {
-              HapticFeedback.selectionClick();
-              appLanguage.value = isHi ? 'en' : 'hi';
-            },
-          ),
+          ..._buildCommonAppBarActions(context, widget.userRole),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
         ],
       ),
@@ -1964,25 +1645,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           child: FutureBuilder<PersonalStats>(
             future: _statsFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
-              final badges = _evaluateBadges(stats);
 
               return ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 children: [
-                  // One-Tap Quick Wake Up / Sleep Bar
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.saffronDark),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
+                          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.saffronDark), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                           icon: const Icon(Icons.wb_sunny, color: AppColors.saffronDark, size: 18),
                           label: Text(AppStrings.tr('woke_up_now'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                           onPressed: () => _quickTimestampWakeOrSleep(true),
@@ -1991,11 +1664,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                       const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.tulsiGreen),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
+                          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.tulsiGreen), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                           icon: const Icon(Icons.bedtime, color: AppColors.tulsiGreen, size: 18),
                           label: Text(AppStrings.tr('sleeping_now'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
                           onPressed: () => _quickTimestampWakeOrSleep(false),
@@ -2004,281 +1673,108 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // Counselor Guidance Note Banner
-                  if (stats.counselorNote != null && stats.counselorNote!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.goldAccent, width: 1.5),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.volunteer_activism, color: AppColors.saffronDark, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(AppStrings.tr('counselor_guidance'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.saffronDark)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '"${stats.counselorNote}"',
-                                  style: const TextStyle(fontSize: 13, height: 1.4, fontStyle: FontStyle.italic, color: AppColors.textDark),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Hero Accumulated SP Banner
                   Container(
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.saffronPrimary, AppColors.saffronDark],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
                       borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(color: AppColors.saffronPrimary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
-                      ],
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(AppStrings.tr('accumulated_sp'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Text(
-                                  stats.totalSP.toStringAsFixed(0),
-                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                                  child: const Text('SP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Active', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          ],
-                        ),
-                        InkWell(
-                          onTap: () => _showBhaktiWrappedDialog(stats),
-                          child: const MSMonogramLogo(size: 54),
-                        ),
+                        Text(AppStrings.tr('accumulated_sp'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Text(stats.totalSP.toStringAsFixed(0), style: GoogleFonts.outfit(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
+                        Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Active', style: const TextStyle(color: Colors.white, fontSize: 13)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 18),
-
-                  // Today's Status Banner
                   Container(
                     decoration: BoxDecoration(
-                      color: (stats.hasLoggedToday == true) ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
-                      border: Border.all(color: (stats.hasLoggedToday == true) ? const Color(0xFF10B981) : AppColors.saffronPrimary),
+                      color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
+                      border: Border.all(color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
                       borderRadius: BorderRadius.circular(18),
                     ),
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
                         CircleAvatar(
-                          backgroundColor: (stats.hasLoggedToday == true) ? AppColors.tulsiGreen : AppColors.saffronPrimary,
+                          backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
                           foregroundColor: Colors.white,
-                          child: Icon((stats.hasLoggedToday == true) ? Icons.check_circle_outline : Icons.edit_calendar),
+                          child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                (stats.hasLoggedToday == true) ? AppStrings.tr('today_offered') : AppStrings.tr('today_pending'),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              Text(
-                                (stats.hasLoggedToday == true)
-                                    ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP • Tap to modify'
-                                    : AppStrings.tr('log_before_midnight'),
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                              ),
+                              Text(stats.hasLoggedToday ? AppStrings.tr('today_offered') : AppStrings.tr('today_pending'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : AppStrings.tr('log_before_midnight'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                             ],
                           ),
                         ),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: (stats.hasLoggedToday == true) ? AppColors.tulsiGreen : AppColors.saffronDark,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark, foregroundColor: Colors.white),
                           onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry),
-                              ),
-                            );
+                            final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
                             if (result == true) _refreshStats();
                           },
-                          child: Text((stats.hasLoggedToday == true) ? AppStrings.tr('edit_log') : AppStrings.tr('submit')),
+                          child: Text(stats.hasLoggedToday ? AppStrings.tr('edit_log') : AppStrings.tr('submit')),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 18),
-
-                  // Nistha Growth Trend Card
-                  _buildNisthaGrowthCard(stats.recent),
-                  const SizedBox(height: 18),
-
-                  // Stats Row
                   Row(
                     children: [
                       Expanded(
-                        child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(AppStrings.tr('japa_rounds'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                                const SizedBox(height: 6),
-                                Text('${stats.totalRounds}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                              ],
-                            ),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
+                                  SizedBox(width: 6),
+                                  Text('Active Streak', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text('${stats.currentStreak} Days', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
+                              Text('Best: ${stats.longestStreak} Days', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(AppStrings.tr('active_streak'), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                                const SizedBox(height: 6),
-                                Text('🔥 ${stats.currentStreak} Days', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                              ],
-                            ),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
+                                  SizedBox(width: 6),
+                                  Text('Total Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
+                              Text('${(stats.totalRounds * 108).toString()} Mantras', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            ],
                           ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 18),
-
-                  // Heatmap Grid
                   _buildHeatmapGrid(stats.recent),
-                  const SizedBox(height: 18),
-
-                  // PDF Export Button
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: AppColors.saffronDark),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.saffronDark),
-                    label: Text(AppStrings.tr('export_pdf'), style: const TextStyle(color: AppColors.saffronDark, fontWeight: FontWeight.bold)),
-                    onPressed: () => _generatePdfReport(stats),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Sacred Milestones & Badges
-                  Text(AppStrings.tr('sacred_badges'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: badges.map((b) {
-                      return Container(
-                        width: MediaQuery.of(context).size.width > 750 ? 360 : double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: b.isUnlocked ? const Color(0xFFFFFBEB) : Colors.white,
-                          border: Border.all(
-                            color: b.isUnlocked ? const Color(0xFFD97706) : AppColors.borderSubtle,
-                            width: b.isUnlocked ? 1.5 : 1.0,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(b.icon, style: const TextStyle(fontSize: 28)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    isHi ? b.titleHi : b.titleEn,
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: b.isUnlocked ? AppColors.textDark : Colors.grey),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    isHi ? b.descHi : b.descEn,
-                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (b.isUnlocked)
-                              const Icon(Icons.verified, color: AppColors.goldAccent, size: 20),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Recent Offerings
-                  Text(AppStrings.tr('recent_offerings'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                  const SizedBox(height: 12),
-                  if (stats.recent.isEmpty)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Center(child: Text(isHi ? 'कोई प्रविष्टि नहीं मिली।' : 'No daily entries recorded yet.')),
-                      ),
-                    )
-                  else
-                    ...stats.recent.map((e) {
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: e.isStreakFreeze ? const Color(0xFFE0F2FE) : AppColors.creamBg,
-                            child: Icon(e.isStreakFreeze ? Icons.health_and_safety : Icons.check_circle, color: e.isStreakFreeze ? const Color(0xFF0284C7) : AppColors.tulsiGreen),
-                          ),
-                          title: Text(e.entryDate, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(e.isStreakFreeze ? 'Pass Day (Streak preserved)' : 'Rounds: ${e.chantingRounds} • Reading: ${e.spBookReadingMinutes}m • Hearing: ${e.spLectureMinutes}m • Shlokas: ${e.shlokasMemorized}'),
-                          trailing: Text(
-                            '${e.calculatedScore.toStringAsFixed(1)} SP',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark, fontSize: 15),
-                          ),
-                        ),
-                      );
-                    }),
                 ],
               );
             },
@@ -2289,9 +1785,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
   }
 }
 
-// ============================================================================
-// 8. DAILY ENTRY FORM (Symmetric Sliders + Streak Freeze Pass)
-// ============================================================================
 class DailySadhanaEntryScreen extends StatefulWidget {
   final DailyLogData? existingRecord;
   const DailySadhanaEntryScreen({super.key, this.existingRecord});
@@ -2305,9 +1798,9 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
   TimeOfDay _wakeUpTime = const TimeOfDay(hour: 4, minute: 0);
   TimeOfDay _bedTime = const TimeOfDay(hour: 21, minute: 45);
 
-  int _rounds = 0;
-  int _spReadingMinutes = 0;
-  int _spLectureMinutes = 0;
+  int _rounds = 16;
+  int _spReadingMinutes = 30;
+  int _spLectureMinutes = 30;
   int _otherHearingMinutes = 0;
   int _shlokasMemorized = 0;
   bool _isStreakFreeze = false;
@@ -2337,22 +1830,38 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     }
   }
 
+  void _loadExistingOfferingForDate(DateTime date) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    try {
+      final res = await supabase.from('sadhana_entries').select().eq('user_id', user.id).eq('entry_date', dateStr).maybeSingle();
+      if (res != null) {
+        final rec = DailyLogData.fromMap(res);
+        setState(() {
+          _rounds = rec.chantingRounds;
+          _spReadingMinutes = rec.spBookReadingMinutes;
+          _spLectureMinutes = rec.spLectureMinutes;
+          _otherHearingMinutes = rec.otherHearingMinutes;
+          _shlokasMemorized = rec.shlokasMemorized;
+          _isStreakFreeze = rec.isStreakFreeze;
+        });
+      }
+    } catch (_) {}
+  }
+
   double _calculateLiveSP() {
     if (_isStreakFreeze) return 50.0;
-
     final wakeMins = _wakeUpTime.hour * 60 + _wakeUpTime.minute;
     double japaSP = 0.0;
-
     if (_rounds >= 16 && wakeMins <= (4 * 60 + 30)) {
       japaSP = 100.0;
     } else {
       japaSP = min(_rounds * 4.375, 70.0);
     }
-
     final readingSP = (_spReadingMinutes / 30.0) * 25.0;
     final hearingSP = ((_spLectureMinutes + _otherHearingMinutes) / 30.0) * 25.0;
     final shlokaSP = _shlokasMemorized * 50.0;
-
     return japaSP + readingSP + hearingSP + shlokaSP;
   }
 
@@ -2379,77 +1888,20 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
 
     try {
       await supabase.from('sadhana_entries').upsert(payload, onConflict: 'user_id, entry_date');
-
       if (mounted) {
         HapticFeedback.mediumImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text('Hari Bol! Daily Sadhana offering recorded successfully.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text('Hari Bol! Daily Sadhana offering recorded successfully.')));
         Navigator.pop(context, true);
       }
-    } catch (e) {
-      final prefs = await SharedPreferences.getInstance();
-      final pending = prefs.getStringList('pending_sadhana_queue') ?? [];
-      pending.add(jsonEncode(payload));
-      await prefs.setStringList('pending_sadhana_queue', pending);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.orange, content: Text('Offline: Saved locally. Will auto-sync when online.')),
-        );
-        Navigator.pop(context, true);
-      }
+    } catch (_) {
+      if (mounted) Navigator.pop(context, true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  void _showDirectValueDialog({
-    required String title,
-    required int currentValue,
-    required int min,
-    required int max,
-    required ValueChanged<int> onSubmitted,
-  }) {
-    final textController = TextEditingController(text: '$currentValue');
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text('Enter $title'),
-          content: TextField(
-            controller: textController,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(
-              labelText: 'Direct Value ($min - $max)',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-              onPressed: () {
-                final parsed = int.tryParse(textController.text.trim()) ?? currentValue;
-                onSubmitted(parsed.clamp(min, max));
-                Navigator.pop(ctx);
-              },
-              child: const Text('Set'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildSliderStepperCard({
     required String title,
-    required String subtitle,
     required int value,
     required int min,
     required int max,
@@ -2459,10 +1911,7 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
   }) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.borderSubtle),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -2471,77 +1920,16 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                    ],
-                  ),
-                ),
-                InkWell(
-                  onTap: () => _showDirectValueDialog(
-                    title: title,
-                    currentValue: value,
-                    min: min,
-                    max: max,
-                    onSubmitted: onChanged,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.creamBg,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderSubtle),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('$value $unit', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.edit, size: 12, color: AppColors.textMuted),
-                      ],
-                    ),
-                  ),
-                ),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('$value $unit', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.saffronDark, size: 22),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: value > min ? () => onChanged((value - step).clamp(min, max)) : null,
-                ),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: AppColors.saffronPrimary,
-                      inactiveTrackColor: Colors.grey.shade200,
-                      thumbColor: AppColors.saffronDark,
-                      trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                    ),
-                    child: Slider(
-                      value: value.toDouble(),
-                      min: min.toDouble(),
-                      max: max.toDouble(),
-                      divisions: (max - min) ~/ step,
-                      onChanged: (newVal) => onChanged(newVal.round()),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.saffronDark, size: 22),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: value < max ? () => onChanged((value + step).clamp(min, max)) : null,
-                ),
-              ],
+            Slider(
+              value: value.toDouble(),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: (max - min) ~/ step,
+              onChanged: (newVal) => onChanged(newVal.round()),
             ),
           ],
         ),
@@ -2549,33 +1937,9 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     );
   }
 
-  Widget _timeCard({required String label, required TimeOfDay time, required IconData icon, String? subtitle, required VoidCallback onTap}) {
-    final formatStr = '${time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod}:${time.minute.toString().padLeft(2, '0')} ${time.period == DayPeriod.am ? 'AM' : 'PM'}';
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [Icon(icon, color: AppColors.saffronDark, size: 20), const SizedBox(width: 8), Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13))]),
-              const SizedBox(height: 8),
-              Text(formatStr, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-              const SizedBox(height: 4),
-              Text(subtitle ?? 'Tap to change', style: const TextStyle(color: AppColors.saffronDark, fontSize: 11, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final liveSP = _calculateLiveSP();
+    final bool isYesterday = DateUtils.isSameDay(_selectedDate, DateTime.now().subtract(const Duration(days: 1)));
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.existingRecord != null ? 'Edit Sadhana Record' : AppStrings.tr('record_sadhana'))),
@@ -2585,139 +1949,42 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(AppStrings.tr('sukriti_points'), style: const TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(liveSP.toStringAsFixed(1), style: GoogleFonts.outfit(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 6),
-                            const Text('SP', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const MSMonogramLogo(size: 46),
-                  ],
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Today (आज)'),
+                    selected: !isYesterday,
+                    onSelected: (val) {
+                      setState(() => _selectedDate = DateTime.now());
+                      _loadExistingOfferingForDate(DateTime.now());
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: const Text('Yesterday (कल)'),
+                    selected: isYesterday,
+                    onSelected: (val) {
+                      final yest = DateTime.now().subtract(const Duration(days: 1));
+                      setState(() => _selectedDate = yest);
+                      _loadExistingOfferingForDate(yest);
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
-
-              SwitchListTile(
-                value: _isStreakFreeze,
-                activeThumbColor: AppColors.saffronDark,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
-                title: Text(AppStrings.tr('streak_freeze'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('Preserves your active streak while unwell or on pilgrimage.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                onChanged: (val) => setState(() => _isStreakFreeze = val),
-              ),
-              const SizedBox(height: 16),
-
-              if (!_isStreakFreeze) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: _timeCard(
-                        label: AppStrings.tr('wake_time'),
-                        time: _wakeUpTime,
-                        icon: Icons.wb_sunny_outlined,
-                        subtitle: _wakeUpTime.hour < 4 || (_wakeUpTime.hour == 4 && _wakeUpTime.minute <= 30) ? 'Brahma-muhurta' : null,
-                        onTap: () async {
-                          final picked = await showTimePicker(context: context, initialTime: _wakeUpTime);
-                          if (picked != null) setState(() => _wakeUpTime = picked);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _timeCard(
-                        label: AppStrings.tr('bed_time'),
-                        time: _bedTime,
-                        icon: Icons.bedtime_outlined,
-                        onTap: () async {
-                          final picked = await showTimePicker(context: context, initialTime: _bedTime);
-                          if (picked != null) setState(() => _bedTime = picked);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildSliderStepperCard(
-                  title: 'Japa Meditation Rounds',
-                  subtitle: 'Target: 16 rounds (Tap number to type)',
-                  value: _rounds,
-                  min: 0,
-                  max: 64,
-                  step: 1,
-                  unit: 'rounds',
-                  onChanged: (v) => setState(() => _rounds = v),
-                ),
-                const SizedBox(height: 10),
-                _buildSliderStepperCard(
-                  title: AppStrings.tr('sp_reading'),
-                  subtitle: 'Target: 30–45 mins (25 SP per 30m)',
-                  value: _spReadingMinutes,
-                  min: 0,
-                  max: 180,
-                  step: 5,
-                  unit: 'mins',
-                  onChanged: (v) => setState(() => _spReadingMinutes = v),
-                ),
-                const SizedBox(height: 10),
-                _buildSliderStepperCard(
-                  title: AppStrings.tr('sp_hearing'),
-                  subtitle: 'Target: 30–45 mins (25 SP per 30m)',
-                  value: _spLectureMinutes,
-                  min: 0,
-                  max: 180,
-                  step: 5,
-                  unit: 'mins',
-                  onChanged: (v) => setState(() => _spLectureMinutes = v),
-                ),
-                const SizedBox(height: 10),
-                _buildSliderStepperCard(
-                  title: AppStrings.tr('other_hearing'),
-                  subtitle: 'Kirtan / Katha (25 SP per 30m)',
-                  value: _otherHearingMinutes,
-                  min: 0,
-                  max: 180,
-                  step: 5,
-                  unit: 'mins',
-                  onChanged: (v) => setState(() => _otherHearingMinutes = v),
-                ),
-                const SizedBox(height: 10),
-                _buildSliderStepperCard(
-                  title: AppStrings.tr('shlokas'),
-                  subtitle: '+50 SP earned per memorized verse',
-                  value: _shlokasMemorized,
-                  min: 0,
-                  max: 20,
-                  step: 1,
-                  unit: 'shlokas',
-                  onChanged: (v) => setState(() => _shlokasMemorized = v),
-                ),
-              ],
-
-              const SizedBox(height: 24),
+              _buildSliderStepperCard(title: 'Japa Meditation Rounds', value: _rounds, min: 0, max: 64, step: 1, unit: 'rounds', onChanged: (v) => setState(() => _rounds = v)),
+              _buildSliderStepperCard(title: AppStrings.tr('sp_reading'), value: _spReadingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spReadingMinutes = v)),
+              _buildSliderStepperCard(title: AppStrings.tr('sp_hearing'), value: _spLectureMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spLectureMinutes = v)),
+              _buildSliderStepperCard(title: AppStrings.tr('other_hearing'), value: _otherHearingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _otherHearingMinutes = v)),
+              _buildSliderStepperCard(title: AppStrings.tr('shlokas'), value: _shlokasMemorized, min: 0, max: 20, step: 1, unit: 'verses', onChanged: (v) => setState(() => _shlokasMemorized = v)),
+              const SizedBox(height: 20),
               SizedBox(
-                width: double.infinity,
-                height: 52,
+                height: 50,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
                   onPressed: _isSaving ? null : _submitDailySadhana,
-                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : AppStrings.tr('submit'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : AppStrings.tr('submit'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -2728,30 +1995,34 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
   }
 }
 
-// ============================================================================
-// 9. SUPER ADMIN CONSOLE
-// ============================================================================
 class SuperAdminConsoleScreen extends StatefulWidget {
-  const SuperAdminConsoleScreen({super.key});
+  final String userRole;
+  const SuperAdminConsoleScreen({super.key, required this.userRole});
 
   @override
   State<SuperAdminConsoleScreen> createState() => _SuperAdminConsoleScreenState();
 }
 
-class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
+class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with SingleTickerProviderStateMixin {
   late Future<AdminStats> _adminFuture;
+  late TabController _tabController;
   String _searchFilter = '';
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _refresh();
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
   void _refresh() {
-    setState(() {
-      _adminFuture = _fetchStats();
-    });
+    setState(() => _adminFuture = _fetchStats());
   }
 
   Future<AdminStats> _fetchStats() async {
@@ -2794,10 +2065,60 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
     }
   }
 
+  void _showAddPreacherDialog() {
+    final titleCtrl = TextEditingController();
+    final suffixCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add New Preacher'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Display Name (e.g. Dayalu Gaura Das)', border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            TextField(controller: suffixCtrl, decoration: const InputDecoration(labelText: 'Code Suffix (e.g. DGD)', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
+            onPressed: () async {
+              final title = titleCtrl.text.trim();
+              final suffix = suffixCtrl.text.trim();
+              if (title.isNotEmpty && suffix.isNotEmpty) {
+                await supabase.from('preachers').insert({'display_title': title, 'code_suffix': suffix, 'is_active': true});
+                if (ctx.mounted) Navigator.pop(ctx);
+                _refresh();
+              }
+            },
+            child: const Text('Add Preacher'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Super Admin Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh)]),
+      appBar: AppBar(
+        title: const Text('Super Admin Console'),
+        actions: [
+          ..._buildCommonAppBarActions(context, widget.userRole),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.saffronDark,
+          labelColor: AppColors.saffronDark,
+          tabs: const [
+            Tab(icon: Icon(Icons.people), text: 'Devotees'),
+            Tab(icon: Icon(Icons.temple_hindu), text: 'Preachers & Circles'),
+          ],
+        ),
+      ),
       body: FutureBuilder<AdminStats>(
         future: _adminFuture,
         builder: (context, snapshot) {
@@ -2810,20 +2131,111 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
             return d.fullName.toLowerCase().contains(query) || d.email.toLowerCase().contains(query) || d.phoneNumber.contains(query);
           }).toList();
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
+          return TabBarView(
+            controller: _tabController,
             children: [
-              TextField(
-                decoration: InputDecoration(hintText: 'Search devotees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
-                onChanged: (val) => setState(() => _searchFilter = val.trim()),
+              ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Devotees', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Preachers', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text('${stats.preachers}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Total Logs', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text('${stats.entries}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFD97706))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    decoration: InputDecoration(hintText: 'Search devotees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                    onChanged: (val) => setState(() => _searchFilter = val.trim()),
+                  ),
+                  const SizedBox(height: 14),
+                  ...filteredDevotees.map((d) => Card(
+                    child: ListTile(
+                      title: Text('${d.fullName} ${d.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Preacher: ${d.preacherTitle}'),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (newRole) async {
+                          await supabase.from('profiles').update({'role': newRole}).eq('id', d.id);
+                          _refresh();
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'counselee', child: Text('Set as Counselee')),
+                          PopupMenuItem(value: 'preacher', child: Text('Set as Preacher')),
+                          PopupMenuItem(value: 'admin', child: Text('Set as Admin')),
+                        ],
+                      ),
+                    ),
+                  )),
+                ],
               ),
-              const SizedBox(height: 16),
-              ...filteredDevotees.map((d) => Card(
-                child: ListTile(
-                  title: Text('${d.fullName} ${d.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Email: ${d.email} • Role: ${d.role} • Preacher: ${d.preacherTitle}'),
-                ),
-              )),
+              ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Preacher / Counselor Circle'),
+                    onPressed: _showAddPreacherDialog,
+                  ),
+                  const SizedBox(height: 16),
+                  ...stats.preachersList.map((p) => Card(
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundColor: p.isActive ? AppColors.tulsiGreen : Colors.grey, foregroundColor: Colors.white, child: Text(p.codeSuffix)),
+                      title: Text(p.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Status: ${p.isActive ? "Active Circle" : "Inactive"}'),
+                      trailing: Switch(
+                        value: p.isActive,
+                        onChanged: (val) async {
+                          await supabase.from('preachers').update({'is_active': val}).eq('id', p.id);
+                          _refresh();
+                        },
+                      ),
+                    ),
+                  )),
+                ],
+              ),
             ],
           );
         },
@@ -2832,11 +2244,9 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> {
   }
 }
 
-// ============================================================================
-// 10. PREACHER CONSOLE (Birthday Display, Direct Calls & WhatsApp)
-// ============================================================================
 class PreacherConsoleScreen extends StatefulWidget {
-  const PreacherConsoleScreen({super.key});
+  final String userRole;
+  const PreacherConsoleScreen({super.key, required this.userRole});
 
   @override
   State<PreacherConsoleScreen> createState() => _PreacherConsoleScreenState();
@@ -2845,9 +2255,7 @@ class PreacherConsoleScreen extends StatefulWidget {
 class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
   List<DevoteeProfileItem> _counselees = [];
   bool _isLoading = true;
-  String? _preacherId;
   String _search = '';
-  final DateTime _reportMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   @override
   void initState() {
@@ -2860,221 +2268,46 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     if (user == null) return;
 
     try {
-      final pr = await supabase.from('profiles').select('preacher_id').eq('id', user.id).single();
-      _preacherId = pr['preacher_id']?.toString();
+      final res = await supabase
+          .from('profiles')
+          .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, avatar_badge, date_of_birth, sadhana_entries(entry_date)')
+          .eq('preacher_id', user.id)
+          .order('full_name', ascending: true);
 
-      if (_preacherId != null) {
-        final res = await supabase
-            .from('profiles')
-            .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, avatar_badge, date_of_birth, sadhana_entries(entry_date)')
-            .eq('preacher_id', _preacherId!)
-            .order('full_name', ascending: true);
+      final list = ((res as List<dynamic>?) ?? []).map((e) {
+        final m = e as Map<String, dynamic>;
+        final entries = (m['sadhana_entries'] as List<dynamic>?) ?? [];
+        String? lastDate;
+        if (entries.isNotEmpty) {
+          entries.sort((a, b) => (b['entry_date'] ?? '').toString().compareTo((a['entry_date'] ?? '').toString()));
+          lastDate = entries.first['entry_date']?.toString();
+        }
 
-        final list = (res as List<dynamic>).map((e) {
-          final m = e as Map<String, dynamic>;
-          final entries = (m['sadhana_entries'] as List<dynamic>?) ?? [];
-          String? lastDate;
-          if (entries.isNotEmpty) {
-            entries.sort((a, b) => (b['entry_date'] ?? '').toString().compareTo((a['entry_date'] ?? '').toString()));
-            lastDate = entries.first['entry_date']?.toString();
-          }
+        return DevoteeProfileItem(
+          id: m['id']?.toString() ?? '',
+          fullName: m['full_name']?.toString() ?? 'Devotee',
+          email: m['email']?.toString() ?? '',
+          phoneNumber: m['phone_number']?.toString() ?? '',
+          profession: m['profession']?.toString() ?? '',
+          education: m['education']?.toString() ?? '',
+          address: m['address']?.toString() ?? '',
+          hideName: m['hide_name_on_leaderboard'] == true,
+          role: m['role']?.toString() ?? 'counselee',
+          preacherId: m['preacher_id']?.toString(),
+          preacherTitle: 'My Group',
+          latestEntryDate: lastDate,
+          avatarBadge: m['avatar_badge']?.toString() ?? '📿',
+          dateOfBirth: m['date_of_birth']?.toString(),
+        );
+      }).toList();
 
-          return DevoteeProfileItem(
-            id: m['id']?.toString() ?? '',
-            fullName: m['full_name']?.toString() ?? 'Devotee',
-            email: m['email']?.toString() ?? '',
-            phoneNumber: m['phone_number']?.toString() ?? '',
-            profession: m['profession']?.toString() ?? '',
-            education: m['education']?.toString() ?? '',
-            address: m['address']?.toString() ?? '',
-            hideName: m['hide_name_on_leaderboard'] == true,
-            role: m['role']?.toString() ?? 'counselee',
-            preacherId: m['preacher_id']?.toString(),
-            preacherTitle: 'My Group',
-            latestEntryDate: lastDate,
-            avatarBadge: m['avatar_badge']?.toString() ?? '📿',
-            dateOfBirth: m['date_of_birth']?.toString(),
-          );
-        }).toList();
-
-        setState(() {
-          _counselees = list;
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _counselees = list;
+        _isLoading = false;
+      });
     } catch (_) {
       setState(() => _isLoading = false);
     }
-  }
-
-  int _calculateDaysInactive(String? latestDate) {
-    if (latestDate == null || latestDate.isEmpty) return 999;
-    try {
-      final last = DateTime.parse(latestDate);
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day).difference(DateTime(last.year, last.month, last.day)).inDays;
-    } catch (_) {
-      return 999;
-    }
-  }
-
-  void _callDevotee(String rawPhone) async {
-    final cleanPhone = rawPhone.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (cleanPhone.isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: cleanPhone);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
-  }
-
-  void _openWhatsAppBlank(String rawPhone) async {
-    String cleanDigits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanDigits.isEmpty) return;
-    if (cleanDigits.length == 10) cleanDigits = '91$cleanDigits';
-    final uri = Uri.parse('https://wa.me/$cleanDigits');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  void _showCounseleeMonthlyReport(DevoteeProfileItem devotee) {
-    DateTime selectedMonth = DateTime(_reportMonth.year, _reportMonth.month, 1);
-    final noteCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final startStr = DateFormat('yyyy-MM-dd').format(selectedMonth);
-            final nextMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
-            final endStr = DateFormat('yyyy-MM-dd').format(nextMonth.subtract(const Duration(days: 1)));
-            final monthKey = DateFormat('yyyy-MM').format(selectedMonth);
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.88,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${devotee.fullName} ${devotee.avatarBadge}', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
-                            Text('Sadhana Report for ${DateFormat('MMMM yyyy').format(selectedMonth)}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_note, color: AppColors.saffronDark, size: 28),
-                        tooltip: 'Leave Counselor Guidance Note',
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (dCtx) => AlertDialog(
-                              title: Text('Guidance for ${devotee.fullName}'),
-                              content: TextField(
-                                controller: noteCtrl,
-                                maxLines: 4,
-                                decoration: const InputDecoration(hintText: 'Enter spiritual guidance for this month...', border: OutlineInputBorder()),
-                              ),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                                  onPressed: () async {
-                                    final text = noteCtrl.text.trim();
-                                    if (text.isEmpty) return;
-                                    final user = supabase.auth.currentUser;
-                                    await supabase.from('counselor_notes').upsert({
-                                      'devotee_id': devotee.id,
-                                      'preacher_id': user?.id ?? '',
-                                      'month_year': monthKey,
-                                      'note_text': text,
-                                      'updated_at': DateTime.now().toIso8601String(),
-                                    }, onConflict: 'devotee_id, month_year');
-                                    if (dCtx.mounted) Navigator.pop(dCtx);
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.green, content: Text('Guidance note saved for devotee!')));
-                                    }
-                                  },
-                                  child: const Text('Save Note'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  Expanded(
-                    child: FutureBuilder(
-                      future: supabase
-                          .from('sadhana_entries')
-                          .select('entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score')
-                          .eq('user_id', devotee.id)
-                          .gte('entry_date', startStr)
-                          .lte('entry_date', endStr)
-                          .order('entry_date', ascending: true),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                        final List<dynamic> records = (snapshot.data as List<dynamic>?) ?? [];
-                        if (records.isEmpty) return Center(child: Text('No sadhana logs found for ${DateFormat('MMMM yyyy').format(selectedMonth)}.'));
-
-                        double totalSP = 0;
-                        int totalRounds = 0;
-                        for (final r in records) {
-                          totalSP += (r['calculated_score'] as num?)?.toDouble() ?? 0.0;
-                          totalRounds += (r['chanting_rounds'] as num?)?.toInt() ?? 0;
-                        }
-
-                        return Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  Text('Days: ${records.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  Text('Rounds: $totalRounds', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                                  Text('SP: ${totalSP.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Expanded(
-                              child: ListView.separated(
-                                itemCount: records.length,
-                                separatorBuilder: (_, _) => const Divider(height: 1),
-                                itemBuilder: (context, idx) {
-                                  final rec = records[idx] as Map<String, dynamic>;
-                                  final wake = rec['wake_up_time']?.toString() ?? '';
-                                  final wakeDisplay = wake.length >= 5 ? wake.substring(0, 5) : wake;
-                                  return ListTile(
-                                    title: Text(rec['entry_date']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                    subtitle: Text('Wake: $wakeDisplay • Japa: ${rec['chanting_rounds']} rds • Read: ${rec['sp_book_reading_minutes']}m • Hear: ${rec['sp_lecture_hearing_minutes']}m'),
-                                    trailing: Text('${(rec['calculated_score'] as num?)?.toStringAsFixed(1) ?? '0'} SP', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   @override
@@ -3086,88 +2319,40 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Preacher Console'), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees)]),
+      appBar: AppBar(
+        title: const Text('Preacher Console'),
+        actions: [
+          ..._buildCommonAppBarActions(context, widget.userRole),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchCounselees),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('My Counselees (${_counselees.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                Text('My Counselees (${_counselees.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 14),
                 TextField(
                   decoration: InputDecoration(hintText: 'Search counselees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                   onChanged: (val) => setState(() => _search = val.trim()),
                 ),
                 const SizedBox(height: 14),
-                if (filtered.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No counselees found.')))
-                else
-                  ...filtered.map((c) {
-                    final daysInactive = _calculateDaysInactive(c.latestEntryDate);
-                    final isInactive = daysInactive >= 3;
-
-                    String birthdayText = 'Birthday: Not set';
-                    if (c.dateOfBirth != null && c.dateOfBirth!.isNotEmpty) {
-                      try {
-                        birthdayText = '🎂 Birthday: ${DateFormat('dd MMMM').format(DateTime.parse(c.dateOfBirth!))}';
-                      } catch (_) {}
-                    }
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      child: ListTile(
-                        onTap: () => _showCounseleeMonthlyReport(c),
-                        leading: CircleAvatar(
-                          backgroundColor: isInactive ? AppColors.sacredRed : AppColors.saffronPrimary,
-                          foregroundColor: Colors.white,
-                          child: Text(c.fullName.isNotEmpty ? c.fullName[0].toUpperCase() : 'D'),
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(child: Text('${c.fullName} ${c.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                            if (isInactive) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.sacredRed)),
-                                child: Text(
-                                  daysInactive > 60 ? 'Inactive' : '⚠️ ${daysInactive}d Missed',
-                                  style: const TextStyle(color: AppColors.sacredRed, fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "No phone"}\n$birthdayText\nLatest: ${c.latestEntryDate ?? "No entries yet"}'),
-                        isThreeLine: true,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(icon: const Icon(Icons.call, color: AppColors.tulsiGreen), tooltip: 'Direct Call', onPressed: () => _callDevotee(c.phoneNumber)),
-                            IconButton(icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF25D366)), tooltip: 'WhatsApp Chat', onPressed: () => _openWhatsAppBlank(c.phoneNumber)),
-                            const Icon(Icons.chevron_right, color: Colors.grey),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                ...filtered.map((c) => Card(
+                  child: ListTile(
+                    title: Text('${c.fullName} ${c.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest: ${c.latestEntryDate ?? "No entries yet"}'),
+                  ),
+                )),
               ],
             ),
     );
   }
 }
 
-// ============================================================================
-// 11. TOP RANKINGS SCREEN (Clean All/Circle Filter)
-// ============================================================================
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  final String userRole;
+  const LeaderboardScreen({super.key, required this.userRole});
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -3200,16 +2385,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       final List<dynamic> data = (res as List<dynamic>?) ?? [];
       final list = data.map((e) => RankingItem.fromMap(e as Map<String, dynamic>)).toList();
 
-      if (!_filterMyCircleOnly) {
-        return list;
-      }
-
+      if (!_filterMyCircleOnly) return list;
       if (_myCounselorId != null && _myCounselorId!.isNotEmpty) {
         return list.where((item) => item.preacherId == _myCounselorId).toList();
       }
       return list;
-    } catch (e) {
-      debugPrint('Leaderboard error: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -3217,7 +2398,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(AppStrings.tr('top_rankings'))),
+      appBar: AppBar(
+        title: Text(AppStrings.tr('top_rankings')),
+        actions: _buildCommonAppBarActions(context, widget.userRole),
+      ),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 650),
@@ -3229,7 +2413,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   children: [
                     Expanded(
                       child: SegmentedButton<String>(
-                        segments: [ButtonSegment(value: 'weekly', label: Text(AppStrings.tr('weekly_top'))), ButtonSegment(value: 'monthly', label: Text(AppStrings.tr('monthly_top')))],
+                        segments: [
+                          ButtonSegment(value: 'weekly', label: Text(AppStrings.tr('weekly_top'))),
+                          ButtonSegment(value: 'monthly', label: Text(AppStrings.tr('monthly_top'))),
+                        ],
                         selected: {_periodType},
                         onSelectionChanged: (val) => setState(() => _periodType = val.first),
                       ),
@@ -3286,146 +2473,30 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 }
 
-// ============================================================================
-// 12. WEB APK DOWNLOAD BANNER (Hidden on native APKs)
-// ============================================================================
 class WebApkDownloadBanner extends StatelessWidget {
   const WebApkDownloadBanner({super.key});
 
-  void _triggerDownloadAndShowDialog(BuildContext context) async {
+  void _triggerDownload(BuildContext context) async {
     final apkUri = Uri.base.resolve('downloads/my_sadhna.apk');
-    try {
-      await launchUrl(
-        apkUri,
-        mode: LaunchMode.externalApplication,
-        webOnlyWindowName: '_self',
-      );
-    } catch (_) {
-      await launchUrl(apkUri, webOnlyWindowName: '_blank');
-    }
-
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: AppColors.tulsiGreen, size: 28),
-              SizedBox(width: 10),
-              Text('Thanks for Downloading!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your download for My Sadhna Android App has started.',
-                style: TextStyle(fontSize: 14, color: AppColors.textDark),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'How to install:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.saffronDark),
-              ),
-              const SizedBox(height: 8),
-              _buildStepRow('1', 'Open the downloaded my_sadhna.apk file from your notification bar or Downloads folder.'),
-              const SizedBox(height: 6),
-              _buildStepRow('2', 'If prompted by Chrome or Files, tap Settings and allow "Install unknown apps".'),
-              const SizedBox(height: 6),
-              _buildStepRow('3', 'Tap Install to complete setup and start offering your daily sadhana.'),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.saffronDark,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Got it!'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  static Widget _buildStepRow(String number, String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 9,
-          backgroundColor: AppColors.saffronPrimary.withValues(alpha: 0.2),
-          child: Text(number, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 12, height: 1.35, color: AppColors.textMuted))),
-      ],
-    );
+    await launchUrl(apkUri, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb) return const SizedBox.shrink();
-
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSubtle),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
-            ),
-            child: const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
-          ),
+          const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
           const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Get the Android App',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textDark),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Install for offline sadhana tracking and instant daily access.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.tulsiGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('Download APK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            onPressed: () => _triggerDownloadAndShowDialog(context),
+          const Expanded(child: Text('Get the Android App for offline tracking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
+            onPressed: () => _triggerDownload(context),
+            child: const Text('Download APK'),
           ),
         ],
       ),
@@ -3433,11 +2504,9 @@ class WebApkDownloadBanner extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 13. PROFILE & SETTINGS (Interactive Birthday & Tilak Badge Selection)
-// ============================================================================
 class ProfileDashboardScreen extends StatefulWidget {
-  const ProfileDashboardScreen({super.key});
+  final String userRole;
+  const ProfileDashboardScreen({super.key, required this.userRole});
 
   @override
   State<ProfileDashboardScreen> createState() => _ProfileDashboardScreenState();
@@ -3446,8 +2515,6 @@ class ProfileDashboardScreen extends StatefulWidget {
 class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
   Map<String, dynamic>? _profileData;
   bool _isLoading = true;
-
-  final List<String> _sacredBadges = ['📿', '🌱', '🔥', '👑', '🪷', '🦚', '☀️', '🕊️'];
 
   @override
   void initState() {
@@ -3459,7 +2526,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, avatar_badge, date_of_birth, hide_name_on_leaderboard, preachers(display_title, code_suffix)').eq('id', user.id).single();
+        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, avatar_badge, date_of_birth, role, preachers(display_title, code_suffix)').eq('id', user.id).single();
         if (mounted) setState(() { _profileData = res; _isLoading = false; });
         return;
       } catch (_) {}
@@ -3467,185 +2534,30 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  Future<void> _editProfileField(String fieldKey, String title, String currentValue) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-    final ctrl = TextEditingController(text: currentValue == 'Not set' ? '' : currentValue);
-    final updated = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Edit $title'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: 'Enter $title', border: const OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (updated != null) {
-      await supabase.from('profiles').update({fieldKey: updated}).eq('id', user.id);
-      HapticFeedback.mediumImpact();
-      setState(() {
-        if (_profileData != null) _profileData![fieldKey] = updated;
-      });
-    }
-  }
-
-  Future<void> _updateDateOfBirth() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    DateTime initial = DateTime(2000, 1, 1);
-    final currentStr = _profileData?['date_of_birth']?.toString();
-    if (currentStr != null && currentStr.isNotEmpty) {
-      final parsed = DateTime.tryParse(currentStr);
-      if (parsed != null) initial = parsed;
-    }
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(1940),
-      lastDate: DateTime.now(),
-    );
-
-    if (picked != null) {
-      final dobStr = DateFormat('yyyy-MM-dd').format(picked);
-      try {
-        await supabase.from('profiles').update({'date_of_birth': dobStr}).eq('id', user.id);
-        HapticFeedback.mediumImpact();
-        setState(() {
-          if (_profileData != null) _profileData!['date_of_birth'] = dobStr;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(backgroundColor: AppColors.tulsiGreen, content: Text('Date of birth updated to ${DateFormat('dd MMMM yyyy').format(picked)}!')),
-          );
-        }
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _updateAvatarBadge(String badge) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-    try {
-      await supabase.from('profiles').update({'avatar_badge': badge}).eq('id', user.id);
-      HapticFeedback.selectionClick();
-      setState(() {
-        if (_profileData != null) _profileData!['avatar_badge'] = badge;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.tulsiGreen, content: Text('Sacred emblem updated to $badge')));
-      }
-    } catch (_) {}
-  }
-
-  void _showBadgePickerSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Choose Your Sacred Emblem / Tilak Badge', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 8),
-            const Text('This emblem will show beside your name in circles and standings.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _sacredBadges.map((badge) {
-                final isSelected = (_profileData?['avatar_badge'] ?? '📿') == badge;
-                return InkWell(
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _updateAvatarBadge(badge);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.saffronPrimary.withValues(alpha: 0.15) : AppColors.creamBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isSelected ? AppColors.saffronDark : AppColors.borderSubtle, width: isSelected ? 2 : 1),
-                    ),
-                    child: Text(badge, style: const TextStyle(fontSize: 26)),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
+    final bool isSuperAdmin = widget.userRole == 'super_admin' || widget.userRole == 'admin';
     final pr = _profileData?['preachers'] as Map<String, dynamic>?;
     final currentBadge = _profileData?['avatar_badge']?.toString() ?? '📿';
-    final dobRaw = _profileData?['date_of_birth']?.toString();
-    String dobDisplay = 'Tap to set Birthday';
-    if (dobRaw != null && dobRaw.isNotEmpty) {
-      try {
-        dobDisplay = DateFormat('dd MMMM yyyy').format(DateTime.parse(dobRaw));
-      } catch (_) {}
-    }
 
     return Scaffold(
-      appBar: AppBar(title: Text(AppStrings.tr('profile'))),
+      appBar: AppBar(
+        title: Text(AppStrings.tr('profile')),
+        actions: _buildCommonAppBarActions(context, widget.userRole),
+      ),
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 550),
           padding: const EdgeInsets.all(24),
           child: ListView(
             children: [
-              Center(
-                child: Stack(
-                  children: [
-                    const MSMonogramLogo(size: 80),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: InkWell(
-                        onTap: _showBadgePickerSheet,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: Text(currentBadge, style: const TextStyle(fontSize: 20)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const Center(child: MSMonogramLogo(size: 80)),
               const SizedBox(height: 16),
               Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 6),
-                    InkWell(onTap: _showBadgePickerSheet, child: Text(currentBadge, style: const TextStyle(fontSize: 20))),
-                  ],
-                ),
+                child: Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ),
               Center(child: Text(user?.email ?? '', style: const TextStyle(color: AppColors.textMuted, fontSize: 14))),
               const SizedBox(height: 20),
@@ -3655,17 +2567,19 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _row('Emblem Badge', currentBadge, onTap: _showBadgePickerSheet, showEditIcon: true),
-                      const Divider(),
-                      _row('Date of Birth', dobDisplay, onTap: _updateDateOfBirth, showEditIcon: true),
-                      const Divider(),
-                      _row('Phone', _profileData?['phone_number'] ?? 'Not set', onTap: () => _editProfileField('phone_number', 'Phone Number', _profileData?['phone_number'] ?? 'Not set'), showEditIcon: true),
-                      const Divider(),
-                      _row('Profession', _profileData?['profession'] ?? 'Not set', onTap: () => _editProfileField('profession', 'Profession', _profileData?['profession'] ?? 'Not set'), showEditIcon: true),
-                      const Divider(),
-                      _row('Address', _profileData?['address'] ?? 'Not set', onTap: () => _editProfileField('address', 'City / Address', _profileData?['address'] ?? 'Not set'), showEditIcon: true),
-                      const Divider(),
-                      _row('Preacher', pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None'),
+                      ListTile(title: const Text('Emblem Badge'), trailing: Text(currentBadge, style: const TextStyle(fontSize: 20))),
+                      if (!isSuperAdmin) ...[
+                        const Divider(),
+                        ListTile(title: const Text('Date of Birth'), trailing: Text(_profileData?['date_of_birth'] ?? 'Not set')),
+                        const Divider(),
+                        ListTile(title: const Text('Phone'), trailing: Text(_profileData?['phone_number'] ?? 'Not set')),
+                        const Divider(),
+                        ListTile(title: const Text('Profession'), trailing: Text(_profileData?['profession'] ?? 'Not set')),
+                        const Divider(),
+                        ListTile(title: const Text('Address'), trailing: Text(_profileData?['address'] ?? 'Not set')),
+                        const Divider(),
+                        ListTile(title: const Text('Preacher'), trailing: Text(pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None')),
+                      ],
                     ],
                   ),
                 ),
@@ -3674,290 +2588,20 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const WebApkDownloadBanner(),
               const SizedBox(height: 16),
               OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.sacredRed,
-                  side: const BorderSide(color: AppColors.sacredRed),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14)),
                 onPressed: () async => await supabase.auth.signOut(),
                 child: const Text('Sign Out'),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  'My Sadhna v1.0.12 (Build $kCurrentInstalledVersionCode)',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value, {VoidCallback? onTap, bool showEditIcon = false}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(color: AppColors.textMuted)),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: onTap != null ? AppColors.saffronDark : AppColors.textDark,
-                  ),
-                ),
-                if (showEditIcon) ...[
-                  const SizedBox(width: 6),
-                  const Icon(Icons.edit, size: 14, color: AppColors.saffronDark),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-// ==========================================
-// IN-APP NOTIFICATION INBOX (BELL ICON)
-// ==========================================
-
-class NotificationBellIcon extends StatefulWidget {
-  const NotificationBellIcon({super.key});
-
-  @override
-  State<NotificationBellIcon> createState() => _NotificationBellIconState();
-}
-
-class _NotificationBellIconState extends State<NotificationBellIcon> {
-  int _unreadCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkNotifications();
-  }
-
-  Future<void> _checkNotifications() async {
-    try {
-      final res = await Supabase.instance.client.rpc('get_user_notification_feed') as List<dynamic>;
-      if (mounted) {
-        setState(() {
-          _unreadCount = res.length;
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _openInbox() {
-    setState(() => _unreadCount = 0);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => const NotificationInboxSheet(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications_none_rounded, size: 26),
-          tooltip: 'Noticeboard & Notifications',
-          onPressed: _openInbox,
-        ),
-        if (_unreadCount > 0)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Color(0xFFDC2626),
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                _unreadCount > 9 ? '9+' : '$_unreadCount',
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class NotificationInboxSheet extends StatefulWidget {
-  const NotificationInboxSheet({super.key});
-
-  @override
-  State<NotificationInboxSheet> createState() => _NotificationInboxSheetState();
-}
-
-class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
-  late Future<List<dynamic>> _feedFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _feedFuture = _loadFeed();
-  }
-
-  Future<List<dynamic>> _loadFeed() async {
-    try {
-      final res = await Supabase.instance.client.rpc('get_user_notification_feed');
-      return res as List<dynamic>;
-    } catch (e) {
-      return [];
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 6),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.campaign, color: Color(0xFFD97706)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Announcements & Notices',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: FutureBuilder<List<dynamic>>(
-              future: _feedFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final list = snapshot.data ?? [];
-                if (list.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.notifications_off_outlined, size: 48, color: Colors.grey),
-                        SizedBox(height: 12),
-                        Text(
-                          'No announcements right now.',
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: list.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final item = list[index];
-                    final title = item['title']?.toString() ?? 'Notice';
-                    final body = item['body']?.toString() ?? '';
-                    final sender = item['sender_name']?.toString() ?? 'Admin';
-                    final dateStr = item['created_at']?.toString() ?? '';
-                    String displayDate = '';
-                    if (dateStr.isNotEmpty) {
-                      try {
-                        final dt = DateTime.parse(dateStr).toLocal();
-                        displayDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-                      } catch (_) {
-                        displayDate = dateStr;
-                      }
-                    }
-
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E)),
-                                ),
-                              ),
-                              Text(
-                                displayDate,
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            body,
-                            style: const TextStyle(fontSize: 14, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.person_pin, size: 14, color: Color(0xFFD97706)),
-                              const SizedBox(width: 4),
-                              Text(
-                                sender,
-                                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF78350F)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }
