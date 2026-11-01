@@ -19,25 +19,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 22;
+const int kCurrentInstalledVersionCode = 23;
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
-void import_web_print() {
-  if (kIsWeb) {
-    try {
-      // ignore: undefined_prefixed_name
-      import_js_print();
-    } catch (_) {}
-  }
-}
 
-void import_js_print() {
-  // Uses standard browser print dialog which has 'Save as PDF'
-  ServicesBinding.instance.defaultBinaryMessenger;
-}
 
 
 String formatIndianNumber(num count) {
@@ -1624,45 +1612,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
                     label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                     onPressed: () async {
-                      final user = supabase.auth.currentUser;
-                      final monthStr = DateFormat('MMMM yyyy').format(DateTime.now());
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: Row(
-                            children: const [
-                              Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
-                              SizedBox(width: 8),
-                              Text('Monthly Sadhana Report'),
-                            ],
-                          ),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Devotee: Sadhak'),
-                              Text('Period: $monthStr'),
-                              Text('Total SP: ${stats.totalSP.toStringAsFixed(0)}'),
-                              Text('Total Rounds: ${stats.totalRounds} (${formatIndianNumber(namesCount)} Names)'),
-                              Text('Active Streak: ${stats.currentStreak} Days'),
-                              const SizedBox(height: 12),
-                              const Text('Report compiled and ready for counselor submission.', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-                              icon: const Icon(Icons.print, size: 16),
-                              label: const Text('Print / Save PDF'),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Opening Print dialogue (select Save as PDF)')));
-                              },
-                            ),
-                          ],
-                        ),
-                      );
+                      if (kIsWeb) {
+                        try {
+                          await launchUrl(Uri.parse('javascript:window.print()'));
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please press Ctrl+P (or Cmd+P) to Save as PDF.')));
+                          }
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monthly Sadhana Report prepared.')));
+                      }
                     },
                   ),
                 ],
@@ -2009,9 +1969,14 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     );
   }
 
-  void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
+    void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
     final nameCtrl = TextEditingController(text: devotee.fullName);
+    final emailCtrl = TextEditingController(text: devotee.email);
+    final passCtrl = TextEditingController();
     final phoneCtrl = TextEditingController(text: devotee.phoneNumber);
+    final profCtrl = TextEditingController(text: devotee.profession);
+    final eduCtrl = TextEditingController(text: devotee.education);
+    final addrCtrl = TextEditingController(text: devotee.address);
     final badgeCtrl = TextEditingController(text: devotee.avatarBadge);
     String selectedRole = devotee.role;
     String? selectedPreacher = devotee.preacherId;
@@ -2025,11 +1990,15 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder())),
+                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Badge / Emblem (e.g. 📿, 🌟, 🎖️)', border: OutlineInputBorder())),
+                TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Reset Password (empty = unchanged)', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 📿, 🌸, 👑)', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
@@ -2053,6 +2022,12 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   ],
                   onChanged: (val) => setDlgState(() => selectedPreacher = val),
                 ),
+                const SizedBox(height: 10),
+                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder())),
               ],
             ),
           ),
@@ -2061,15 +2036,34 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
               onPressed: () async {
-                await supabase.from('profiles').update({
-                  'full_name': nameCtrl.text.trim(),
-                  'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                  'avatar_badge': badgeCtrl.text.trim().isEmpty ? '📿' : badgeCtrl.text.trim(),
-                  'role': selectedRole,
-                  'preacher_id': selectedPreacher,
-                }).eq('id', devotee.id);
-                if (ctx.mounted) Navigator.pop(ctx);
-                _refresh();
+                try {
+                  // Call admin credentials procedure if email or password was edited
+                  if ((emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != devotee.email) || passCtrl.text.trim().isNotEmpty) {
+                    await supabase.rpc('admin_update_user_credentials', params: {
+                      'p_target_user_id': devotee.id,
+                      'p_new_email': emailCtrl.text.trim().isNotEmpty ? emailCtrl.text.trim() : null,
+                      'p_new_password': passCtrl.text.trim().isNotEmpty ? passCtrl.text.trim() : null,
+                    });
+                  }
+                  await supabase.from('profiles').update({
+                    'full_name': nameCtrl.text.trim(),
+                    'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                    'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                    'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                    'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                    'avatar_badge': badgeCtrl.text.trim().isEmpty ? '📿' : badgeCtrl.text.trim(),
+                    'role': selectedRole,
+                    'preacher_id': selectedPreacher,
+                  }).eq('id', devotee.id);
+
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Devotee details updated successfully.')));
+                    _refresh();
+                  }
+                } catch (e) {
+                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               },
               child: const Text('Save Details'),
             ),
@@ -2463,6 +2457,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         final user = supabase.auth.currentUser;
                         if (user != null) {
                           await supabase.from('profiles').update({'hide_name_on_leaderboard': val}).eq('id', user.id);
+                          if (mounted) setState(() {});
                         }
                       },
                     ),
