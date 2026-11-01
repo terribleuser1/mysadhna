@@ -19,7 +19,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 23;
+const int kCurrentInstalledVersionCode = 25;
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -258,6 +258,26 @@ Future<void> main() async {
     publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
   );
 
+  
+  // Request notification permissions for Android 13+ and iOS
+  try {
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final token = await messaging.getToken();
+      final user = supabase.auth.currentUser;
+      if (token != null && user != null) {
+        await supabase.from('profiles').update({'fcm_token': token}).eq('id', user.id);
+      }
+    }
+  } catch (e) {
+    debugPrint('FCM permission error: $e');
+  }
+
   runApp(const MySadhnaApp());
 }
 
@@ -305,6 +325,7 @@ class NotificationBellIcon extends StatefulWidget {
 
 class _NotificationBellIconState extends State<NotificationBellIcon> {
   int _unreadCount = 0;
+  int _totalFeedCount = 0;
 
   @override
   void initState() {
@@ -315,12 +336,21 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
   Future<void> _checkNotifications() async {
     try {
       final res = await supabase.rpc('get_user_notification_feed');
-      if (mounted && res is List) setState(() => _unreadCount = res.length);
+      if (mounted && res is List) {
+        _totalFeedCount = res.length;
+        final prefs = await SharedPreferences.getInstance();
+        final lastSeenCount = prefs.getInt('last_seen_notice_count') ?? 0;
+        final unread = _totalFeedCount > lastSeenCount ? (_totalFeedCount - lastSeenCount) : 0;
+        setState(() => _unreadCount = unread);
+      }
     } catch (_) {}
   }
 
-  void _openInbox() {
+  void _openInbox() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_seen_notice_count', _totalFeedCount);
     setState(() => _unreadCount = 0);
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1222,7 +1252,10 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
     }
 
     return Scaffold(
-      body: screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: screens,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
@@ -1438,9 +1471,11 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           child: FutureBuilder<PersonalStats>(
             future: _statsFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
               final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
-              
+
               final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
               final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
               final hasToday = stats.recent.any((e) => e.entryDate == todayStr);
@@ -1448,184 +1483,192 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
               final bool bothSubmitted = hasToday && hasYest;
               final namesCount = stats.totalRounds * 1728;
 
-              return ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.saffronDark), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                          icon: const Icon(Icons.wb_sunny, color: AppColors.saffronDark, size: 18),
-                          label: const Text('Woke up now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                          onPressed: () => _quickTimestampWakeOrSleep(true),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.tulsiGreen), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                          icon: const Icon(Icons.bedtime, color: AppColors.tulsiGreen, size: 18),
-                          label: const Text('Sleeping now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
-                          onPressed: () => _quickTimestampWakeOrSleep(false),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(22),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              
+             return RefreshIndicator(
+                onRefresh: () async {
+                  _refreshStats();
+                  await _statsFuture;
+                },
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  children: [
+                    Row(
                       children: [
-                        const Text('ACCUMULATED SUKRITI POINTS', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(stats.totalSP.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
-                        Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
-                      border: Border.all(color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
-                          foregroundColor: Colors.white,
-                          child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
-                        ),
-                        const SizedBox(width: 14),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                              Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : 'Log before midnight to earn Sukriti Points', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                            ],
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.saffronDark), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                            icon: const Icon(Icons.wb_sunny, color: AppColors.saffronDark, size: 18),
+                            label: const Text('Woke up now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                            onPressed: () => _quickTimestampWakeOrSleep(true),
                           ),
                         ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark, foregroundColor: Colors.white),
-                          onPressed: () async {
-                            final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
-                            if (result == true) _refreshStats();
-                          },
-                          child: Text(bothSubmitted ? 'Edit Sadhna' : 'Submit Sadhna'),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.tulsiGreen), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                            icon: const Icon(Icons.bedtime, color: AppColors.tulsiGreen, size: 18),
+                            label: const Text('Sleeping now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
+                            onPressed: () => _quickTimestampWakeOrSleep(false),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: const [
-                                  Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
-                                  SizedBox(width: 6),
-                                  Text('Active Streak', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('${stats.currentStreak} Days', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
-                              Text('Best: ${stats.longestStreak} Days', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                            ],
-                          ),
-                        ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
+                        borderRadius: BorderRadius.circular(22),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: const [
-                                  Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
-                                  SizedBox(width: 6),
-                                  Text('30-Day Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                              Text('${formatIndianNumber(namesCount)} Holy Names', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                            ],
-                          ),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('ACCUMULATED SUKRITI POINTS', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Text(stats.totalSP.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
+                          Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  _buildHeatmapGrid(stats.recent),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
+                        border: Border.all(color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
+                            foregroundColor: Colors.white,
+                            child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : 'Log before midnight to earn Sukriti Points', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark, foregroundColor: Colors.white),
+                            onPressed: () async {
+                              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
+                              if (result == true) _refreshStats();
+                            },
+                            child: Text(bothSubmitted ? 'Edit Sadhna' : 'Submit Sadhna'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            Text('Active: ${stats.avatarBadge}', style: const TextStyle(fontSize: 16)),
-                          ],
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: const [
+                                    Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
+                                    SizedBox(width: 6),
+                                    Text('Active Streak', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text('${stats.currentStreak} Days', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
+                                Text('Best: ${stats.longestStreak} Days', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            const Chip(avatar: Text('📿'), label: Text('Japa Sadhak')),
-                            const Chip(avatar: Text('🌅'), label: Text('Brahma Muhurta')),
-                            Chip(avatar: const Text('🔥'), label: Text('${stats.currentStreak}d Streak')),
-                            if (stats.totalRounds >= 64) const Chip(avatar: Text('👑'), label: Text('Harinam Premi')),
-                          ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: const [
+                                    Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
+                                    SizedBox(width: 6),
+                                    Text('30-Day Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
+                                Text('${formatIndianNumber(namesCount)} Holy Names', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 46),
-                      side: const BorderSide(color: AppColors.saffronDark),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    const SizedBox(height: 18),
+                    _buildHeatmapGrid(stats.recent),
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text('Active: ${stats.avatarBadge}', style: const TextStyle(fontSize: 16)),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              const Chip(avatar: Text('📿'), label: Text('Japa Sadhak')),
+                              const Chip(avatar: Text('🌅'), label: Text('Brahma Muhurta')),
+                              Chip(avatar: const Text('🔥'), label: Text('${stats.currentStreak}d Streak')),
+                              if (stats.totalRounds >= 64) const Chip(avatar: Text('👑'), label: Text('Harinam Premi')),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
-                    label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                    onPressed: () async {
-                      if (kIsWeb) {
-                        try {
-                          await launchUrl(Uri.parse('javascript:window.print()'));
-                        } catch (_) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please press Ctrl+P (or Cmd+P) to Save as PDF.')));
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 46),
+                        side: const BorderSide(color: AppColors.saffronDark),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
+                      label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                      onPressed: () async {
+                        if (kIsWeb) {
+                          try {
+                            await launchUrl(Uri.parse('javascript:window.print()'));
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please press Ctrl+P (or Cmd+P) to Save as PDF.')));
+                            }
                           }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monthly Sadhana Report prepared.')));
                         }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monthly Sadhana Report prepared.')));
-                      }
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -1930,6 +1973,81 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     }
   }
 
+  
+  void _showCreateCounseleeDialog(List<PreacherItem> preachers) {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final profCtrl = TextEditingController();
+    final eduCtrl = TextEditingController();
+    final addrCtrl = TextEditingController();
+    String? selectedPreacherId = preachers.isNotEmpty ? preachers.first.id : null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          title: const Text('Register New Counselee'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name *', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Google Login Email *', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPreacherId,
+                  decoration: const InputDecoration(labelText: 'Assign Preacher Circle', border: OutlineInputBorder()),
+                  items: preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+                  onChanged: (val) => setDlgState(() => selectedPreacherId = val),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final email = emailCtrl.text.trim();
+                if (name.isEmpty || email.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and Email are required.')));
+                  return;
+                }
+                try {
+                  await supabase.rpc('admin_create_counselee', params: {
+                    'p_full_name': name,
+                    'p_email': email,
+                    'p_phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                    'p_preacher_id': selectedPreacherId,
+                    'p_profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                    'p_education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                    'p_address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _refresh();
+                } catch (e) {
+                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              child: const Text('Create Counselee'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAddOrEditPreacherDialog([PreacherItem? existing]) {
     final titleCtrl = TextEditingController(text: existing?.displayTitle ?? '');
     final suffixCtrl = TextEditingController(text: existing?.codeSuffix ?? '');
@@ -2113,38 +2231,26 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   Row(
                     children: [
                       Expanded(
-                        child: InkWell(
-                          onTap: () => _tabController.animateTo(0),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.saffronPrimary, width: 1.5)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Devotees (Tap to View)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                const SizedBox(height: 4),
-                                Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
-                              ],
-                            ),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Total Devotees', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: InkWell(
-                          onTap: () => _tabController.animateTo(1),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.tulsiGreen, width: 1.5)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Preachers (Tap to View)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                const SizedBox(height: 4),
-                                Text('${stats.preachers}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                              ],
-                            ),
-                          ),
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                          icon: const Icon(Icons.person_add, size: 18),
+                          label: const Text('Add Counselee', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: () => _showCreateCounseleeDialog(stats.preachersList),
                         ),
                       ),
                     ],
@@ -2223,6 +2329,67 @@ class PreacherConsoleScreen extends StatefulWidget {
 }
 
 class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
+
+  void _showPreacherAddCounseleeDialog() {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final profCtrl = TextEditingController();
+    final addrCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Counselee to My Circle'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name *', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Google Login Email *', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final email = emailCtrl.text.trim();
+              if (name.isEmpty || email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and Email are required.')));
+                return;
+              }
+              try {
+                await supabase.rpc('admin_create_counselee', params: {
+                  'p_full_name': name,
+                  'p_email': email,
+                  'p_phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  'p_preacher_id': supabase.auth.currentUser?.id,
+                  'p_profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                  'p_address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                _fetchCounselees();
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Add to Circle'),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<DevoteeProfileItem> _counselees = [];
   bool _isLoading = true;
   String _search = '';
@@ -2301,7 +2468,20 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text('My Counselees (${_counselees.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('My Counselees (${_counselees.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.person_add, size: 16),
+                      label: const Text('Add Counselee'),
+                      onPressed: () => _showPreacherAddCounseleeDialog(),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 14),
                 TextField(
                   decoration: InputDecoration(hintText: 'Search counselees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
@@ -2333,10 +2513,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   String? _selectedPreacherId;
   List<PreacherItem> _preachers = [];
   bool _hideMyName = false;
+  late Future<List<RankingItem>> _rankingsFuture; // <--- ADD THIS
 
-  @override
+  void _refreshRankings() { // <--- ADD THIS HELPER
+    setState(() {
+      _rankingsFuture = _fetchTopRankings();
+    });
+  }
+
+ @override
   void initState() {
     super.initState();
+    _rankingsFuture = _fetchTopRankings(); // <--- ADD THIS LINE
     _fetchPreachersAndProfile();
   }
 
@@ -2390,7 +2578,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           ButtonSegment(value: 'monthly', label: Text('Monthly')),
                         ],
                         selected: {_periodType},
-                        onSelectionChanged: (val) => setState(() => _periodType = val.first),
+                        onSelectionChanged: (val) {
+                          _periodType = val.first;
+                          _refreshRankings();
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2401,44 +2592,64 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         const DropdownMenuItem(value: null, child: Text('All Circles (Global)')),
                         ..._preachers.map((p) => DropdownMenuItem(value: p.id, child: Text(p.codeSuffix))),
                       ],
-                      onChanged: (val) => setState(() => _selectedPreacherId = val),
+                      onChanged: (val) {
+                        _selectedPreacherId = val;
+                        _refreshRankings();
+                      },
                     ),
                   ],
                 ),
               ),
               Expanded(
                 child: FutureBuilder<List<RankingItem>>(
-                  future: _fetchTopRankings(),
+                  future: _rankingsFuture,
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                    if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
                     final rankings = snapshot.data ?? [];
-                    if (rankings.isEmpty) return const Center(child: Text('No sadhana offerings logged yet.'));
+                    if (rankings.isEmpty) {
+                      return RefreshIndicator(
+                        onRefresh: () async => _refreshRankings(),
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(height: 120),
+                            Center(child: Text('No sadhana offerings logged yet.')),
+                          ],
+                        ),
+                      );
+                    }
 
-                    return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: rankings.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = rankings[index];
-                        return ListTile(
-                          tileColor: item.isCurrentUser ? AppColors.saffronPrimary.withValues(alpha: 0.12) : null,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          leading: CircleAvatar(
-                            backgroundColor: item.rank == 1 ? AppColors.goldAccent : (item.rank == 2 ? const Color(0xFFC0C0C0) : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
-                            foregroundColor: item.rank <= 3 ? Colors.white : Colors.black87,
-                            child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName, style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold)),
-                              const SizedBox(width: 6),
-                              Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
-                            ],
-                          ),
-                          subtitle: Text('Circle: ${item.preacherSuffix} • ${item.totalRounds} Rounds'),
-                          trailing: Text('${item.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
-                        );
-                      },
+                    return RefreshIndicator(
+                      onRefresh: () async => _refreshRankings(),
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        itemCount: rankings.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = rankings[index];
+                          return ListTile(
+                            tileColor: item.isCurrentUser ? AppColors.saffronPrimary.withValues(alpha: 0.12) : null,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            leading: CircleAvatar(
+                              backgroundColor: item.rank == 1 ? AppColors.goldAccent : (item.rank == 2 ? const Color(0xFFC0C0C0) : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
+                              foregroundColor: item.rank <= 3 ? Colors.white : Colors.black87,
+                              child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            title: Row(
+                              children: [
+                                Text(item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName, style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold)),
+                                const SizedBox(width: 6),
+                                Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
+                              ],
+                            ),
+                            subtitle: Text('Circle: ${item.preacherSuffix} • ${item.totalRounds} Rounds'),
+                            trailing: Text('${item.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
