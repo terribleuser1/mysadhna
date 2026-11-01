@@ -1,25 +1,25 @@
-import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 25;
+const int kCurrentInstalledVersionCode = 20; // Match the new build number (+20)
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -268,6 +268,7 @@ Future<void> main() async {
       sound: true,
     );
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // ignore: deprecated_member_use
       final token = await messaging.getToken();
       final user = supabase.auth.currentUser;
       if (token != null && user != null) {
@@ -944,9 +945,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _handleGoogleSignIn() async {
     try {
       setState(() => _isLoading = true);
-      await supabase.auth.signInWithOAuth(OAuthProvider.google, redirectTo: kIsWeb ? null : 'mysadhna://login-callback');
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: kIsWeb ? null : 'mysadhna://login-callback',
+        authScreenLaunchMode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.inAppBrowserView,
+      );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1357,35 +1368,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     }
   }
 
-  Future<void> _quickTimestampWakeOrSleep(bool isWakeUp) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-    final now = DateTime.now();
-    final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:00';
-
-    try {
-      final payload = isWakeUp ? {'wake_up_time': timeStr} : {'bed_time': timeStr};
-      await supabase.from('sadhana_entries').upsert({
-        'user_id': user.id,
-        'entry_date': todayStr,
-        ...payload,
-        'last_modified_timestamp': now.toIso8601String(),
-      }, onConflict: 'user_id, entry_date');
-
-      HapticFeedback.mediumImpact();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.tulsiGreen,
-            content: Text(isWakeUp ? '🌅 Wake-up logged ($timeStr)' : '🌙 Bedtime logged ($timeStr)'),
-          ),
-        );
-        _refreshStats();
-      }
-    } catch (_) {}
-  }
-
   Widget _buildHeatmapGrid(List<DailyLogData> entries) {
     final now = DateTime.now();
     final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
@@ -1493,28 +1475,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.saffronDark), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                            icon: const Icon(Icons.wb_sunny, color: AppColors.saffronDark, size: 18),
-                            label: const Text('Woke up now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                            onPressed: () => _quickTimestampWakeOrSleep(true),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.tulsiGreen), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                            icon: const Icon(Icons.bedtime, color: AppColors.tulsiGreen, size: 18),
-                            label: const Text('Sleeping now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
-                            onPressed: () => _quickTimestampWakeOrSleep(false),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
@@ -1551,8 +1511,14 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                Text(stats.hasLoggedToday ? 'Score: ${stats.todayEntry?.calculatedScore.toStringAsFixed(1)} SP' : 'Log before midnight to earn Sukriti Points', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                                Text(
+                                  bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                Text(
+                                  stats.hasLoggedToday ? 'Offering recorded for today' : 'Log before midnight to keep your active streak',
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                                ),
                               ],
                             ),
                           ),
@@ -1654,16 +1620,43 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                       icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
                       label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                       onPressed: () async {
-                        if (kIsWeb) {
-                          try {
-                            await launchUrl(Uri.parse('javascript:window.print()'));
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please press Ctrl+P (or Cmd+P) to Save as PDF.')));
-                            }
+                        try {
+                          final doc = pw.Document();
+                          doc.addPage(
+                            pw.Page(
+                              pageFormat: PdfPageFormat.a4,
+                              build: (pw.Context ctx) {
+                                return pw.Padding(
+                                  padding: const pw.EdgeInsets.all(24),
+                                  child: pw.Column(
+                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text('My Sadhna - Monthly Report', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                                      pw.SizedBox(height: 8),
+                                      pw.Text('Total SP: ${stats.totalSP.toStringAsFixed(0)} | Total Rounds: ${stats.totalRounds} | Streak: ${stats.currentStreak} Days'),
+                                      pw.Divider(thickness: 1),
+                                      pw.SizedBox(height: 12),
+                                      pw.TableHelper.fromTextArray(
+                                        headers: ['Date', 'Wake Up', 'Bed Time', 'Rounds', 'SP Score'],
+                                        data: stats.recent.map((e) => [
+                                          e.entryDate,
+                                          e.wakeUpTime,
+                                          e.bedTime,
+                                          '${e.chantingRounds}',
+                                          e.calculatedScore.toStringAsFixed(1),
+                                        ]).toList(),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                          await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => doc.save(), name: 'Sadhana_Report.pdf');
+                        } catch (err) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not generate PDF: $err')));
                           }
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monthly Sadhana Report prepared.')));
                         }
                       },
                     ),
@@ -1746,6 +1739,17 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
           if (bedParts.length >= 2) {
             _bedTime = TimeOfDay(hour: int.tryParse(bedParts[0]) ?? 21, minute: int.tryParse(bedParts[1]) ?? 45);
           }
+        });
+      } else {
+        setState(() {
+          _rounds = 16;
+          _spReadingMinutes = 30;
+          _spLectureMinutes = 30;
+          _otherHearingMinutes = 0;
+          _shlokasMemorized = 0;
+          _isStreakFreeze = false;
+          _wakeUpTime = const TimeOfDay(hour: 4, minute: 0);
+          _bedTime = const TimeOfDay(hour: 21, minute: 45);
         });
       }
     } catch (_) {}
@@ -1879,6 +1883,51 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showTimePicker(context: context, initialTime: _wakeUpTime);
+                            if (picked != null) setState(() => _wakeUpTime = picked);
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('🌅 Wake-up Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text(_wakeUpTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Container(height: 40, width: 1, color: AppColors.borderSubtle, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showTimePicker(context: context, initialTime: _bedTime);
+                            if (picked != null) setState(() => _bedTime = picked);
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('🌙 Bedtime', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
+                              const SizedBox(height: 4),
+                              Text(_bedTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -2364,8 +2413,10 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
             onPressed: () async {
               final name = nameCtrl.text.trim();
               final email = emailCtrl.text.trim();
+              final messenger = ScaffoldMessenger.of(context);
+
               if (name.isEmpty || email.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and Email are required.')));
+                messenger.showSnackBar(const SnackBar(content: Text('Name and Email are required.')));
                 return;
               }
               try {
@@ -2378,9 +2429,11 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                   'p_address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
                 });
                 if (ctx.mounted) Navigator.pop(ctx);
-                _fetchCounselees();
+                if (mounted) _fetchCounselees();
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                if (mounted) {
+                  messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               }
             },
             child: const Text('Add to Circle'),
@@ -2770,6 +2823,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != supabase.auth.currentUser?.email) {
                   await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
@@ -2779,10 +2833,10 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 }
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
                 }
+                messenger.showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+                messenger.showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')));
               }
             },
             child: const Text('Update'),
@@ -2802,10 +2856,10 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final passCtrl = TextEditingController();
     String? selectedPreacherId = _profileData?['preacher_id']?.toString();
 
-    List<Map<String, dynamic>> preachersList = [];
+    final List preachersList = [];
     try {
       final pRes = await supabase.from('preachers').select('id, display_title, code_suffix').eq('is_active', true);
-      preachersList = List<Map<String, dynamic>>.from(pRes as List);
+      preachersList.addAll(pRes);
     } catch (_) {}
 
     if (!mounted) return;
@@ -2827,7 +2881,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: selectedPreacherId,
                   decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
-                  items: preachersList.map((p) => DropdownMenuItem<String>(
+                  items: preachersList.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(
                     value: p['id'].toString(),
                     child: Text('${p['display_title']} (${p['code_suffix']})'),
                   )).toList(),
@@ -2849,26 +2903,40 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
               onPressed: () async {
-                final user = supabase.auth.currentUser;
-                if (user != null) {
-                  if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
-                    await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
+                try {
+                  final user = supabase.auth.currentUser;
+                  if (user != null) {
+                    if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
+                      await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
+                    }
+                    if (passCtrl.text.trim().isNotEmpty) {
+                      await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
+                    }
+                    await supabase.from('profiles').update({
+                      'full_name': nameCtrl.text.trim(),
+                      'email': emailCtrl.text.trim(),
+                      'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                      'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                      'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                      'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                      'preacher_id': selectedPreacherId,
+                    }).eq('id', user.id);
+
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                    }
+                    if (mounted) {
+                      _fetchProfile();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Profile details updated successfully.')),
+                      );
+                    }
                   }
-                  if (passCtrl.text.trim().isNotEmpty) {
-                    await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
-                  }
-                  await supabase.from('profiles').update({
-                    'full_name': nameCtrl.text.trim(),
-                    'email': emailCtrl.text.trim(),
-                    'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                    'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
-                    'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
-                    'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                    'preacher_id': selectedPreacherId,
-                  }).eq('id', user.id);
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    _fetchProfile();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+                    );
                   }
                 }
               },
@@ -2950,7 +3018,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.14 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.18 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
