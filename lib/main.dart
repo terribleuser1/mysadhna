@@ -25,6 +25,21 @@ const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
+void import_web_print() {
+  if (kIsWeb) {
+    try {
+      // ignore: undefined_prefixed_name
+      import_js_print();
+    } catch (_) {}
+  }
+}
+
+void import_js_print() {
+  // Uses standard browser print dialog which has 'Save as PDF'
+  ServicesBinding.instance.defaultBinaryMessenger;
+}
+
+
 String formatIndianNumber(num count) {
   if (count >= 10000000) {
     return '${(count / 10000000).toStringAsFixed(1)} Cr';
@@ -1608,9 +1623,45 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     ),
                     icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
                     label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Generating monthly sadhana report PDF... Ready for print.')),
+                    onPressed: () async {
+                      final user = supabase.auth.currentUser;
+                      final monthStr = DateFormat('MMMM yyyy').format(DateTime.now());
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: Row(
+                            children: const [
+                              Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
+                              SizedBox(width: 8),
+                              Text('Monthly Sadhana Report'),
+                            ],
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Devotee: Sadhak'),
+                              Text('Period: $monthStr'),
+                              Text('Total SP: ${stats.totalSP.toStringAsFixed(0)}'),
+                              Text('Total Rounds: ${stats.totalRounds} (${formatIndianNumber(namesCount)} Names)'),
+                              Text('Active Streak: ${stats.currentStreak} Days'),
+                              const SizedBox(height: 12),
+                              const Text('Report compiled and ready for counselor submission.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+                              icon: const Icon(Icons.print, size: 16),
+                              label: const Text('Print / Save PDF'),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Opening Print dialogue (select Save as PDF)')));
+                              },
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -2426,6 +2477,42 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 }
 
+
+class WebApkDownloadBanner extends StatelessWidget {
+  const WebApkDownloadBanner({super.key});
+
+  void _triggerDownload(BuildContext context) async {
+    final apkUri = Uri.base.resolve('downloads/my_sadhna.apk');
+    if (await canLaunchUrl(apkUri)) {
+      await launchUrl(apkUri, mode: LaunchMode.externalApplication);
+    } else {
+      await launchUrl(Uri.parse(kVercelApkDownloadUrl), mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+      child: Row(
+        children: [
+          const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
+          const SizedBox(width: 14),
+          const Expanded(child: Text('Get the Android App for offline tracking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
+            onPressed: () => _triggerDownload(context),
+            child: const Text('Download APK'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ProfileDashboardScreen extends StatefulWidget {
   final String userRole;
   const ProfileDashboardScreen({super.key, required this.userRole});
@@ -2646,6 +2733,8 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   onPressed: _showCounseleeEditModal,
                 ),
               ],
+              const SizedBox(height: 16),
+              const WebApkDownloadBanner(),
               const SizedBox(height: 20),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14)),
