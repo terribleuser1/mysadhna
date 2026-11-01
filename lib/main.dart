@@ -19,7 +19,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 20; // Match the new build number (+20)
+const int kCurrentInstalledVersionCode = 21; // Match the new build number (+20)
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -327,11 +327,33 @@ class NotificationBellIcon extends StatefulWidget {
 class _NotificationBellIconState extends State<NotificationBellIcon> {
   int _unreadCount = 0;
   int _totalFeedCount = 0;
+  RealtimeChannel? _subscription;
 
   @override
   void initState() {
     super.initState();
     _checkNotifications();
+    _subscribeToLiveBroadcasts();
+  }
+
+  @override
+  void dispose() {
+    _subscription?.unsubscribe();
+    super.dispose();
+  }
+
+  void _subscribeToLiveBroadcasts() {
+    _subscription = supabase
+        .channel('public:notification_broadcasts')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notification_broadcasts',
+          callback: (payload) {
+            _checkNotifications();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _checkNotifications() async {
@@ -389,7 +411,6 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
     );
   }
 }
-
 class NotificationInboxSheet extends StatefulWidget {
   const NotificationInboxSheet({super.key});
 
@@ -720,6 +741,21 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
 List<Widget> _buildCommonAppBarActions(BuildContext context, String currentRole) {
   final isPrivileged = currentRole == 'admin' || currentRole == 'super_admin' || currentRole == 'preacher';
   return [
+    ValueListenableBuilder<String>(
+      valueListenable: appLanguage,
+      builder: (context, lang, _) {
+        return IconButton(
+          icon: Text(
+            lang == 'en' ? 'हिं' : 'EN',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.saffronDark),
+          ),
+          tooltip: lang == 'en' ? 'Switch to Hindi' : 'Switch to English',
+          onPressed: () {
+            appLanguage.value = lang == 'en' ? 'hi' : 'en';
+          },
+        );
+      },
+    ),
     const NotificationBellIcon(),
     if (isPrivileged)
       IconButton(
@@ -1014,7 +1050,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             'profession': _professionController.text.trim(),
             'education': _educationController.text.trim(),
             'address': _addressController.text.trim(),
-            'avatar_badge': '📿',
+            'avatar_badge': '',
             'hide_name_on_leaderboard': false,
             'is_approved': true,
           });
@@ -1364,10 +1400,24 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
   Future<PersonalStats> _fetchPersonalStats(String? userId) async {
     if (userId == null) {
-      return const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+      return const PersonalStats(
+        totalSP: 0,
+        avgSP: 0,
+        totalRounds: 0,
+        count: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        hasLoggedToday: false,
+        todayEntry: null,
+        recent: [],
+      );
     }
     try {
-      final userProf = await supabase.from('profiles').select('full_name, preacher_id, avatar_badge, date_of_birth, preachers(display_title)').eq('id', userId).single();
+      final userProf = await supabase
+          .from('profiles')
+          .select('full_name, preacher_id, avatar_badge, date_of_birth, preachers(display_title)')
+          .eq('id', userId)
+          .single();
       final pTitle = (userProf['preachers'] as Map<String, dynamic>?)?['display_title']?.toString();
       final pId = userProf['preacher_id']?.toString();
       final badge = userProf['avatar_badge']?.toString() ?? '📿';
@@ -1375,7 +1425,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
       final res = await supabase
           .from('sadhana_entries')
-          .select('id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score, is_streak_freeze')
+          .select(
+              'id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score, is_streak_freeze')
           .eq('user_id', userId)
           .order('entry_date', ascending: false)
           .limit(30);
@@ -1427,7 +1478,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         dateOfBirth: dob,
       );
     } catch (_) {
-      return const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+      return const PersonalStats(
+        totalSP: 0,
+        avgSP: 0,
+        totalRounds: 0,
+        count: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        hasLoggedToday: false,
+        todayEntry: null,
+        recent: [],
+      );
     }
   }
 
@@ -1448,7 +1509,11 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.borderSubtle)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1490,14 +1555,156 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                 width: 32,
                 height: 32,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: cellColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: borderCol, width: 1.2)),
-                child: Text('$dayNum', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: entry != null ? AppColors.textDark : Colors.black45)),
+                decoration: BoxDecoration(
+                  color: cellColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderCol, width: 1.2),
+                ),
+                child: Text(
+                  '$dayNum',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: entry != null ? AppColors.textDark : Colors.black45,
+                  ),
+                ),
               );
             }),
           ),
         ],
       ),
     );
+  }
+
+  void _showMonthPickerAndDownload(BuildContext context) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+    // Generate the last 3 calendar months
+    final List<DateTime> candidateMonths = [
+      DateTime(now.year, now.month, 1),
+      DateTime(now.year, now.month - 1, 1),
+      DateTime(now.year, now.month - 2, 1),
+    ];
+
+    final Map<String, List<DailyLogData>> availableMonths = {};
+
+    for (final m in candidateMonths) {
+      final startStr = DateFormat('yyyy-MM-01').format(m);
+      final lastDay = DateTime(m.year, m.month + 1, 0).day;
+      final endStr = DateFormat('yyyy-MM-${lastDay.toString().padLeft(2, '0')}').format(m);
+
+      try {
+        final res = await supabase
+            .from('sadhana_entries')
+            .select(
+                'id, entry_date, wake_up_time, bed_time, chanting_rounds, sp_book_reading_minutes, sp_lecture_hearing_minutes, other_hearing_minutes, shlokas_memorized, calculated_score, is_streak_freeze')
+            .eq('user_id', user.id)
+            .gte('entry_date', startStr)
+            .lte('entry_date', endStr)
+            .order('entry_date', ascending: true);
+
+        final entries = ((res as List<dynamic>?) ?? []).map((e) => DailyLogData.fromMap(e as Map<String, dynamic>)).toList();
+        if (entries.isNotEmpty) {
+          final monthKey = DateFormat('MMMM yyyy').format(m);
+          availableMonths[monthKey] = entries;
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    if (availableMonths.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No sadhana records found in the last 3 months to export.')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select Month for PDF Report',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+              const SizedBox(height: 12),
+              ...availableMonths.entries.map((entry) => Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      leading: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
+                      title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('${entry.value.length} days recorded'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _generateMonthlyPdf(entry.key, entry.value);
+                      },
+                    ),
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateMonthlyPdf(String monthTitle, List<DailyLogData> entries) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final doc = pw.Document();
+      final totalSP = entries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
+      final totalRounds = entries.fold<int>(0, (sum, e) => sum + e.chantingRounds);
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context ctx) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.all(24),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('My Sadhna - Monthly Report ($monthTitle)',
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Total SP: ${totalSP.toStringAsFixed(0)} | Total Rounds: $totalRounds | Days Recorded: ${entries.length}'),
+                  pw.Divider(thickness: 1),
+                  pw.SizedBox(height: 12),
+                  pw.TableHelper.fromTextArray(
+                    headers: ['Date', 'Wake Up', 'Bed Time', 'Rounds', 'Score'],
+                    data: entries.map((e) => [
+                          e.entryDate,
+                          e.wakeUpTime,
+                          e.bedTime,
+                          '${e.chantingRounds}',
+                          e.calculatedScore.toStringAsFixed(1),
+                        ]).toList(),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'Sadhana_Report_${monthTitle.replaceAll(' ', '_')}.pdf',
+      );
+    } catch (err) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not generate PDF: $err')),
+      );
+    }
   }
 
   @override
@@ -1519,7 +1726,18 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final stats = snapshot.data ?? const PersonalStats(totalSP: 0, avgSP: 0, totalRounds: 0, count: 0, currentStreak: 0, longestStreak: 0, hasLoggedToday: false, todayEntry: null, recent: []);
+              final stats = snapshot.data ??
+                  const PersonalStats(
+                    totalSP: 0,
+                    avgSP: 0,
+                    totalRounds: 0,
+                    count: 0,
+                    currentStreak: 0,
+                    longestStreak: 0,
+                    hasLoggedToday: false,
+                    todayEntry: null,
+                    recent: [],
+                  );
 
               final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
               final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
@@ -1528,8 +1746,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
               final bool bothSubmitted = hasToday && hasYest;
               final namesCount = stats.totalRounds * 1728;
 
-              
-             return RefreshIndicator(
+              return RefreshIndicator(
                 onRefresh: () async {
                   _refreshStats();
                   await _statsFuture;
@@ -1547,10 +1764,15 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('ACCUMULATED SUKRITI POINTS', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+                          const Text('ACCUMULATED SUKRITI POINTS',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
-                          Text(stats.totalSP.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
-                          Text('Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text(stats.totalSP.toStringAsFixed(0),
+                              style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
+                          Text(
+                              'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)',
+                              style: const TextStyle(color: Colors.white, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -1558,7 +1780,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     Container(
                       decoration: BoxDecoration(
                         color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
-                        border: Border.all(color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
+                        border: Border.all(
+                            color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
                         borderRadius: BorderRadius.circular(18),
                       ),
                       padding: const EdgeInsets.all(16),
@@ -1575,20 +1798,32 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  bothSubmitted ? "Sadhana Offered (Today & Yesterday)" : (hasToday ? "Today Offered • Yesterday Pending" : "Today's Sadhana Pending"),
+                                  bothSubmitted
+                                      ? "Sadhana Offered (Today & Yesterday)"
+                                      : (hasToday
+                                          ? "Today Offered • Yesterday Pending"
+                                          : "Today's Sadhana Pending"),
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                 ),
                                 Text(
-                                  stats.hasLoggedToday ? 'Offering recorded for today' : 'Log before midnight to keep your active streak',
+                                  stats.hasLoggedToday
+                                      ? 'Offering recorded for today'
+                                      : 'Log before midnight to keep your active streak',
                                   style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                                 ),
                               ],
                             ),
                           ),
                           ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark, foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark,
+                                foregroundColor: Colors.white),
                             onPressed: () async {
-                              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
+                              final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
                               if (result == true) _refreshStats();
                             },
                             child: Text(bothSubmitted ? 'Edit Sadhna' : 'Submit Sadhna'),
@@ -1602,7 +1837,10 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                            decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppColors.borderSubtle)),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1610,12 +1848,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                   children: const [
                                     Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
                                     SizedBox(width: 6),
-                                    Text('Active Streak', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                    Text('Active Streak',
+                                        style: TextStyle(
+                                            fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                Text('${stats.currentStreak} Days', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
-                                Text('Best: ${stats.longestStreak} Days', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                Text('${stats.currentStreak} Days',
+                                    style: const TextStyle(
+                                        fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
+                                Text('Best: ${stats.longestStreak} Days',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                               ],
                             ),
                           ),
@@ -1624,7 +1867,10 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                            decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppColors.borderSubtle)),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1632,12 +1878,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                   children: const [
                                     Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
                                     SizedBox(width: 6),
-                                    Text('30-Day Rounds', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                    Text('30-Day Rounds',
+                                        style: TextStyle(
+                                            fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                Text('${stats.totalRounds}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                                Text('${formatIndianNumber(namesCount)} Holy Names', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                Text('${stats.totalRounds}',
+                                    style: const TextStyle(
+                                        fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
+                                Text('${formatIndianNumber(namesCount)} Holy Names',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                               ],
                             ),
                           ),
@@ -1646,34 +1897,138 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     ),
                     const SizedBox(height: 18),
                     _buildHeatmapGrid(stats.recent),
-                    const SizedBox(height: 18),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                    // --- SACRED ACHIEVEMENTS & MILESTONE ROADMAP ---
+                    Builder(
+                      builder: (context) {
+                        // 1. Brahma Muhurta check (Wake up <= 4:30 AM)
+                        final hasBrahmaMuhurta = stats.recent.any((e) {
+                          final parts = e.wakeUpTime.split(':');
+                          if (parts.length >= 2) {
+                            final h = int.tryParse(parts[0]) ?? 24;
+                            final m = int.tryParse(parts[1]) ?? 60;
+                            return (h * 60 + m) <= (4 * 60 + 30);
+                          }
+                          return false;
+                        });
+
+                        // 2. Active Consistent Streak check (>= 3 days)
+                        final hasStreak = stats.currentStreak >= 3;
+
+                        // 3. Harinam Premi check (>= 64 rounds)
+                        final hasHarinamPremi = stats.totalRounds >= 64;
+
+                        // 4. Shloka Sadhak check (memorized verses)
+                        final totalShlokas = stats.recent.fold<int>(0, (sum, e) => sum + e.shlokasMemorized);
+                        final hasShlokas = totalShlokas > 0;
+
+                        Widget buildBadgeItem({
+                          required String icon,
+                          required String title,
+                          required String condition,
+                          required bool isUnlocked,
+                        }) {
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isUnlocked ? const Color(0xFFF0FDF4) : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isUnlocked ? const Color(0xFF86EFAC) : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(icon, style: TextStyle(fontSize: 20, color: isUnlocked ? null : Colors.grey)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        title,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: isUnlocked ? AppColors.textDark : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      Text(
+                                        condition,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isUnlocked ? AppColors.tulsiSoft : Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  isUnlocked ? Icons.check_circle : Icons.lock_outline,
+                                  size: 18,
+                                  color: isUnlocked ? const Color(0xFF16A34A) : Colors.grey.shade400,
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return Container(
+                          margin: const EdgeInsets.only(top: 18),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text('Active: ${stats.avatarBadge}', style: const TextStyle(fontSize: 16)),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  Text(
+                                    hasBrahmaMuhurta || hasStreak || hasHarinamPremi || hasShlokas ? 'In Progress' : 'No Badges Yet',
+                                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              buildBadgeItem(
+                                icon: '🌅',
+                                title: 'Brahma Muhurta Sadhak',
+                                condition: 'Unlocked by waking up at or before 4:30 AM',
+                                isUnlocked: hasBrahmaMuhurta,
+                              ),
+                              buildBadgeItem(
+                                icon: '🔥',
+                                title: 'Sadhana Fire',
+                                condition: 'Unlocked by maintaining an active streak of 3+ days',
+                                isUnlocked: hasStreak,
+                              ),
+                              buildBadgeItem(
+                                icon: '👑',
+                                title: 'Harinam Premi',
+                                condition: 'Unlocked by completing 64+ rounds in the current month',
+                                isUnlocked: hasHarinamPremi,
+                              ),
+                              buildBadgeItem(
+                                icon: '📖',
+                                title: 'Shloka Sadhak',
+                                condition: 'Unlocked by memorizing spiritual verses',
+                                isUnlocked: hasShlokas,
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              const Chip(avatar: Text('📿'), label: Text('Japa Sadhak')),
-                              const Chip(avatar: Text('🌅'), label: Text('Brahma Muhurta')),
-                              Chip(avatar: const Text('🔥'), label: Text('${stats.currentStreak}d Streak')),
-                              if (stats.totalRounds >= 64) const Chip(avatar: Text('👑'), label: Text('Harinam Premi')),
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 14),
+                    
+                    const SizedBox(height: 18),
+
+                    // --- MONTHWISE PDF DOWNLOAD BUTTON ---
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 46),
@@ -1681,47 +2036,9 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
-                      label: const Text('Download Monthly Sadhana PDF', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                      onPressed: () async {
-                        try {
-                          final doc = pw.Document();
-                          doc.addPage(
-                            pw.Page(
-                              pageFormat: PdfPageFormat.a4,
-                              build: (pw.Context ctx) {
-                                return pw.Padding(
-                                  padding: const pw.EdgeInsets.all(24),
-                                  child: pw.Column(
-                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                                    children: [
-                                      pw.Text('My Sadhna - Monthly Report', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                                      pw.SizedBox(height: 8),
-                                      pw.Text('Total SP: ${stats.totalSP.toStringAsFixed(0)} | Total Rounds: ${stats.totalRounds} | Streak: ${stats.currentStreak} Days'),
-                                      pw.Divider(thickness: 1),
-                                      pw.SizedBox(height: 12),
-                                      pw.TableHelper.fromTextArray(
-                                        headers: ['Date', 'Wake Up', 'Bed Time', 'Rounds', 'SP Score'],
-                                        data: stats.recent.map((e) => [
-                                          e.entryDate,
-                                          e.wakeUpTime,
-                                          e.bedTime,
-                                          '${e.chantingRounds}',
-                                          e.calculatedScore.toStringAsFixed(1),
-                                        ]).toList(),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                          await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => doc.save(), name: 'Sadhana_Report.pdf');
-                        } catch (err) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not generate PDF: $err')));
-                          }
-                        }
-                      },
+                      label: const Text('Download Monthly Sadhana PDF',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                      onPressed: () => _showMonthPickerAndDownload(context),
                     ),
                   ],
                 ),
@@ -2376,12 +2693,14 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   ...filteredDevotees.map((d) => Card(
                     child: ListTile(
                       title: Row(
-                        children: [
-                          Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 6),
-                          Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
-                        ],
-                      ),
+  children: [
+    Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+    if (d.avatarBadge.trim().isNotEmpty && d.avatarBadge != '📿') ...[
+      const SizedBox(width: 6),
+      Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
+    ],
+  ],
+),
                       subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Circle: ${d.preacherTitle}'),
                       trailing: IconButton(
                         icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 28),
@@ -2606,8 +2925,13 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 const SizedBox(height: 14),
                 ...filtered.map((c) => Card(
                   child: ListTile(
-                    title: Text('${c.fullName} ${c.avatarBadge}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}'),
+                    title: Text(
+  (c.avatarBadge.trim().isNotEmpty && c.avatarBadge != '📿')
+      ? '${c.fullName} ${c.avatarBadge}'
+      : c.fullName,
+  style: const TextStyle(fontWeight: FontWeight.bold),
+),
+subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}'),
                   ),
                 )),
               ],
@@ -2755,10 +3079,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
                             title: Row(
-                              children: [
-                                Text(item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName, style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold)),
-                                const SizedBox(width: 6),
-                                Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
+                             children: [
+                                Text(
+                                  item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName,
+                                  style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold),
+                                ),
+                                if (item.avatarBadge.trim().isNotEmpty && item.avatarBadge != '📿') ...[
+                                  const SizedBox(width: 6),
+                                  Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
+                                ],
                               ],
                             ),
                             subtitle: Text('Circle: ${item.preacherSuffix} • ${item.totalRounds} Rounds'),
@@ -3125,7 +3454,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.18 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.20 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
