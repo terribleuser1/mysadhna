@@ -908,6 +908,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentStep = 0;
   bool _isLoginMode = false;
   bool _isLoading = false;
+  String? _updateNoticeMessage;
+  String? _updateNoticeUrl;
 
   bool _obscureLoginPassword = true;
   bool _obscureRegisterPassword = true;
@@ -929,6 +931,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     _fetchPreachers();
+    _checkPreLoginAnnouncements();
+  }
+
+  Future<void> _checkPreLoginAnnouncements() async {
+    try {
+      final res = await supabase
+          .from('announcements')
+          .select()
+          .eq('type', 'update')
+          .eq('is_active', true)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (res != null && mounted) {
+        final int targetBuild = res['min_version_code'] ?? 20;
+        if (kCurrentInstalledVersionCode < targetBuild) {
+          setState(() {
+            _updateNoticeMessage = res['message'] ?? 'A new version is available.';
+            _updateNoticeUrl = res['action_url'] ?? kVercelApkDownloadUrl;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchPreachers() async {
@@ -1056,6 +1082,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 const SizedBox(height: 24),
                 if (_isLoginMode) ...[
+                  if (_updateNoticeMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      border: Border.all(color: AppColors.saffronDark),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _updateNoticeMessage!,
+                          style: const TextStyle(color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.saffronDark,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Update App Now'),
+                          onPressed: () async {
+                            if (_updateNoticeUrl != null) {
+                              final uri = Uri.parse(_updateNoticeUrl!);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                   TextFormField(
                     controller: _emailController,
                     decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
@@ -2845,6 +2908,38 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
       ),
     );
   }
+  Future<void> _postAppUpdateAnnouncement({
+    required String title,
+    required String message,
+    required String apkDownloadUrl,
+    required int targetBuildCode,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await supabase
+          .from('announcements')
+          .update({'is_active': false})
+          .eq('type', 'update');
+
+      await supabase.from('announcements').insert({
+        'title': title,
+        'message': message,
+        'type': 'update',
+        'action_label': 'Download Update',
+        'action_url': apkDownloadUrl,
+        'min_version_code': targetBuildCode,
+        'is_active': true,
+      });
+
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Update announcement published to all devices.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+      );
+    }
+  }
 
   void _showCounseleeEditModal() async {
     final nameCtrl = TextEditingController(text: _profileData?['full_name'] ?? '');
@@ -2978,6 +3073,18 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   icon: const Icon(Icons.security),
                   label: const Text('Change Admin Email / Password'),
                   onPressed: _showAdminSecurityModal,
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  icon: const Icon(Icons.campaign),
+                  label: const Text('Broadcast App Update Notice'),
+                  onPressed: () => _postAppUpdateAnnouncement(
+                    title: '🚀 New Update Available (v1.0.19)',
+                    message: 'A fresh update (Build 20) is live with bug fixes. Tap to update your app.',
+                    apkDownloadUrl: 'https://my-sadhna-psi.vercel.app/downloads/my_sadhna.apk',
+                    targetBuildCode: 20,
+                  ),
                 ),
               ] else ...[
                 Card(
