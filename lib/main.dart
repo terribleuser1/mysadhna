@@ -1,10 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -16,12 +16,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+
+final ValueNotifier<int> globalUnreadAlerts = ValueNotifier<int>(0);
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 24; // Matched with build +22
+const int kCurrentInstalledVersionCode = 25; // Matched with build +22
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -1192,16 +1194,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _handleGoogleSignIn() async {
     const webClientId = '680972598415-sjt80ptiff10qbjt0661s2dnfdtqoorp.apps.googleusercontent.com';
 
-    final GoogleSignIn googleSignIn = GoogleSignIn(
-      serverClientId: webClientId,
-    );
-
     try {
       setState(() => _isLoading = true);
 
+      if (kIsWeb) {
+        // Use native Supabase OAuth on Web to avoid token extraction null errors
+        await supabase.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: 'https://my-sadhna.vercel.app',
+        );
+        return;
+      }
+
+      // Android native Google Sign-In flow
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        serverClientId: webClientId,
+      );
+
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -1210,7 +1222,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final idToken = googleAuth.idToken;
 
       if (idToken == null) {
-        throw Exception('No ID Token received from Google Sign-In.');
+        throw Exception('No ID Token received from Google Play Services.');
       }
 
       await supabase.auth.signInWithIdToken(
