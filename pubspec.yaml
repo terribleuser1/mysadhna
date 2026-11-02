@@ -2,7 +2,7 @@ name: my_sadhna
 description: "Daily Vaishnava Sadhana & Sukriti Points Tracker"
 publish_to: 'none'
 
-version: 1.0.20+21
+version: 1.0.21+22
 
 environment:
   sdk: ^3.13.7
@@ -24,12 +24,31 @@ dependencies:
   firebase_messaging: ^17.0.1
   http: ^1.6.0
   dart_jsonwebtoken: ^3.4.1
-  google_sign_in: ^7.2.0
+  google_sign_in: ^6.2.2
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/images/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FAF9F6"
+  adaptive_icon_foreground: "assets/images/app_logo.png"
+  web:
+    generate: true
+    image_path: "assets/images/app_logo.png"
+    background_color: "#FAF9F6"
+    theme_color: "#C04B00"

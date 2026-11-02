@@ -4,7 +4,7 @@
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FAF9F6",
-    "theme_color": "#FF9933",
+    "theme_color": "#C04B00",
     "description": "Daily Vaishnava Sadhana & Sukriti Points Tracker",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,

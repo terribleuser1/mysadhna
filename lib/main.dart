@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:math';
-
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -19,14 +20,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 21; // Match the new build number (+20)
+const int kCurrentInstalledVersionCode = 22; // Matched with build +22
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
-
-
-
 
 String formatIndianNumber(num count) {
   if (count >= 10000000) {
@@ -52,7 +50,103 @@ class AppColors {
   static const Color sacredRed = Color(0xFF991B1B);
   static const Color borderSubtle = Color(0xFFE2D9D0);
 }
+class VaishnavaTilakLogo extends StatelessWidget {
+  final double size;
+  final bool showText;
 
+  const VaishnavaTilakLogo({
+    super.key,
+    this.size = 48.0,
+    this.showText = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CustomPaint(
+          size: Size(size, size * 1.25),
+          painter: _TilakPainter(),
+        ),
+        if (showText) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'My Sadhna',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppColors.saffronDark,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const Text(
+            'हरे कृष्ण हरे राम 🙏',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.tulsiSoft,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TilakPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // 1. Outer Sacred Circle / Japa Bead Ring
+    final ringPaint = Paint()
+      ..color = AppColors.goldAccent.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.045;
+    canvas.drawCircle(Offset(w / 2, h * 0.5), w * 0.44, ringPaint);
+
+    // 2. Tilak Left & Right Sacred Footprint Lines (Urdhva Pundra)
+    final tilakPaint = Paint()
+      ..color = AppColors.saffronPrimary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.08
+      ..strokeCap = StrokeCap.round;
+
+    final leftPath = Path()
+      ..moveTo(w * 0.38, h * 0.15)
+      ..quadraticBezierTo(w * 0.36, h * 0.45, w * 0.42, h * 0.62);
+
+    final rightPath = Path()
+      ..moveTo(w * 0.62, h * 0.15)
+      ..quadraticBezierTo(w * 0.64, h * 0.45, w * 0.58, h * 0.62);
+
+    canvas.drawPath(leftPath, tilakPaint);
+    canvas.drawPath(rightPath, tilakPaint);
+
+    // 3. Central Sacred Golden Drop (Radha Kripa Bindu)
+    final dropPaint = Paint()
+      ..color = AppColors.goldAccent
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(w / 2, h * 0.32), w * 0.05, dropPaint);
+
+    // 4. Sacred Tulsi Leaf Base
+    final tulsiPaint = Paint()
+      ..color = AppColors.tulsiGreen
+      ..style = PaintingStyle.fill;
+
+    final leafPath = Path()
+      ..moveTo(w / 2, h * 0.60)
+      ..cubicTo(w * 0.34, h * 0.66, w * 0.42, h * 0.82, w / 2, h * 0.88)
+      ..cubicTo(w * 0.58, h * 0.82, w * 0.66, h * 0.66, w / 2, h * 0.60);
+
+    canvas.drawPath(leafPath, tulsiPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 class PreacherItem {
   final String id;
   final String codeSuffix;
@@ -119,7 +213,7 @@ class DevoteeProfileItem {
     required this.preacherId,
     required this.preacherTitle,
     this.latestEntryDate,
-    this.avatarBadge = '📿',
+    this.avatarBadge = '',
     this.dateOfBirth,
   });
 }
@@ -197,7 +291,7 @@ class PersonalStats {
     this.counselorNote,
     this.counselorTitle,
     this.counselorId,
-    this.avatarBadge = '📿',
+    this.avatarBadge = '',
     this.dateOfBirth,
   });
 }
@@ -239,7 +333,7 @@ class RankingItem {
       totalSp: double.tryParse(map['total_sp']?.toString() ?? '0') ?? 0.0,
       totalRounds: int.tryParse(map['total_rounds']?.toString() ?? '0') ?? 0,
       isCurrentUser: map['is_current_user'] == true,
-      avatarBadge: map['avatar_badge']?.toString() ?? '📿',
+      avatarBadge: map['avatar_badge']?.toString() ?? '',
     );
   }
 }
@@ -255,11 +349,10 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://mtduhncyvcmzgekekieq.supabase.co',
-    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
+    publishableKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10ZHVobmN5dmNtemdla2VraWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODA5OTcsImV4cCI6MjEwODg1Njk5N30.QFJvYZDEyPqeQkWJyBV1r8djjkkXXoY3LGuuz4EpdxU',
   );
 
-  
-  // Request notification permissions for Android 13+ and iOS
   try {
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(
@@ -302,12 +395,17 @@ class MySadhnaApp extends StatelessWidget {
               secondary: AppColors.saffronDark,
               surface: AppColors.cardBg,
             ),
-            appBarTheme: const AppBarTheme(
+            appBarTheme: AppBarTheme(
               backgroundColor: AppColors.creamBg,
               elevation: 0,
               centerTitle: true,
-              titleTextStyle: TextStyle(color: AppColors.textDark, fontSize: 19, fontWeight: FontWeight.bold),
-              iconTheme: IconThemeData(color: AppColors.textDark),
+              titleTextStyle: GoogleFonts.cinzel(
+                color: AppColors.textDark,
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+              iconTheme: const IconThemeData(color: AppColors.textDark),
             ),
           ),
           home: const AuthGate(),
@@ -411,6 +509,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
     );
   }
 }
+
 class NotificationInboxSheet extends StatefulWidget {
   const NotificationInboxSheet({super.key});
 
@@ -503,7 +602,8 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                     if (dateStr.isNotEmpty) {
                       try {
                         final dt = DateTime.parse(dateStr).toLocal();
-                        displayDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                        displayDate =
+                            '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
                       } catch (_) {
                         displayDate = dateStr;
                       }
@@ -523,7 +623,9 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
-                                child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E))),
+                                child: Text(title,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E))),
                               ),
                               Text(displayDate, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                             ],
@@ -535,7 +637,9 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                             children: [
                               const Icon(Icons.person_pin, size: 14, color: Color(0xFFD97706)),
                               const SizedBox(width: 4),
-                              Text(sender, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF78350F))),
+                              Text(sender,
+                                  style: const TextStyle(
+                                      fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF78350F))),
                             ],
                           ),
                         ],
@@ -626,7 +730,8 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
               .where((t) => t != null && t.isNotEmpty)
               .cast<String>()
               .toSet()
-              .toList() ?? [];
+              .toList() ??
+          [];
 
       await supabase.from('notification_broadcasts').insert({
         'sender_id': supabase.auth.currentUser?.id,
@@ -674,7 +779,8 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
               DropdownButtonFormField<String>(
                 initialValue: _selectedTarget,
                 isExpanded: true,
-                decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                decoration: const InputDecoration(
+                    border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('1. All Users (Entire App)')),
                   DropdownMenuItem(value: 'all_preachers', child: Text('2. All Preachers Only')),
@@ -695,8 +801,12 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
                     : DropdownButtonFormField<String>(
                         initialValue: _selectedPreacherId,
                         isExpanded: true,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                        items: _preachersList.map((p) => DropdownMenuItem<String>(value: p['id'].toString(), child: Text(p['full_name']?.toString() ?? 'Preacher'))).toList(),
+                        decoration: const InputDecoration(
+                            border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        items: _preachersList
+                            .map((p) => DropdownMenuItem<String>(
+                                value: p['id'].toString(), child: Text(p['full_name']?.toString() ?? 'Preacher')))
+                            .toList(),
                         onChanged: (val) => setState(() => _selectedPreacherId = val),
                       ),
               ],
@@ -705,8 +815,12 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
-                child: const Text('Audience: All Devotees in Your Circle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF92400E))),
+                decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200)),
+                child: const Text('Audience: All Devotees in Your Circle',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF92400E))),
               ),
               const SizedBox(height: 14),
             ],
@@ -825,7 +939,11 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
     try {
       final user = supabase.auth.currentUser;
       if (user != null) {
-        final profile = await supabase.from('profiles').select('full_name, phone_number, profession, address, preacher_id').eq('id', user.id).maybeSingle();
+        final profile = await supabase
+            .from('profiles')
+            .select('full_name, phone_number, profession, address, preacher_id')
+            .eq('id', user.id)
+            .maybeSingle();
         if (profile != null) {
           _nameController.text = profile['full_name']?.toString() ?? user.userMetadata?['name'] ?? '';
           _phoneController.text = profile['phone_number']?.toString() ?? '';
@@ -891,35 +1009,63 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Hare Krishna! 🙏', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
+              const Text('Hare Krishna! 🙏',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
               const SizedBox(height: 6),
-              const Text('Please set your details and assigned counselor before entering.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+              const Text('Please set your details and assigned counselor before entering.',
+                  style: TextStyle(color: Colors.grey, fontSize: 14)),
               const SizedBox(height: 24),
-              TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Devotee / Full Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person))),
+              TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                      labelText: 'Devotee / Full Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person))),
               const SizedBox(height: 16),
-              const Text('Assigned Preacher / Counselor *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const Text('Assigned Preacher / Counselor *',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
                 initialValue: _selectedPreacherId,
                 isExpanded: true,
                 decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.temple_hindu)),
-                items: _preachers.map((p) => DropdownMenuItem<String>(value: p['id'].toString(), child: Text('${p['display_title']} (${p['code_suffix']})'))).toList(),
+                items: _preachers
+                    .map((p) => DropdownMenuItem<String>(
+                        value: p['id'].toString(),
+                        child: Text('${p['display_title']} (${p['code_suffix']})')))
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedPreacherId = val),
               ),
               const SizedBox(height: 16),
-              TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone Number (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone))),
+              TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone))),
               const SizedBox(height: 16),
-              TextField(controller: _professionController, decoration: const InputDecoration(labelText: 'Profession (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.work_outline))),
+              TextField(
+                  controller: _professionController,
+                  decoration: const InputDecoration(
+                      labelText: 'Profession (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.work_outline))),
               const SizedBox(height: 16),
-              TextField(controller: _addressController, decoration: const InputDecoration(labelText: 'City / Address (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on_outlined))),
+              TextField(
+                  controller: _addressController,
+                  decoration: const InputDecoration(
+                      labelText: 'City / Address (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.location_on_outlined))),
               const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _saveDetails,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
-                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('Continue to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('Continue to Dashboard',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -995,7 +1141,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _fetchPreachers() async {
     try {
-      final response = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
+      final response =
+          await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
       final List<dynamic> raw = response as List<dynamic>;
       setState(() {
         _preachersList = raw.map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
@@ -1005,19 +1152,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    const webClientId = '680972598415-sjt80ptiff10qbjt0661s2dnfdtqoorp.apps.googleusercontent.com';
+
+    final GoogleSignIn googleSignIn = GoogleSignIn(
+      serverClientId: webClientId,
+    );
+
     try {
       setState(() => _isLoading = true);
-      await supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: kIsWeb ? null : 'mysadhna://login-callback',
-        authScreenLaunchMode: kIsWeb
-            ? LaunchMode.platformDefault
-            : LaunchMode.inAppBrowserView,
+
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final accessToken = googleAuth.accessToken;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('No ID Token received from Google Sign-In.');
+      }
+
+      await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString())),
+          SnackBar(
+            backgroundColor: AppColors.sacredRed,
+            content: Text('Google Sign-In failed: $e'),
+          ),
         );
       }
     } finally {
@@ -1057,7 +1226,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1077,15 +1249,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))],
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))
+              ],
             ),
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                const Text('My Sadhna', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                const Text('Daily Sadhana & Sukriti Tracker', style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+                const VaishnavaTilakLogo(size: 64, showText: true),
                 const SizedBox(height: 24),
                 Container(
                   decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
@@ -1096,9 +1270,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           onTap: () => setState(() => _isLoginMode = false),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(color: !_isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(
+                                color: !_isLoginMode ? AppColors.saffronPrimary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text('Register', style: TextStyle(fontWeight: FontWeight.bold, color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text('Register',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -1107,9 +1286,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           onTap: () => setState(() => _isLoginMode = true),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(color: _isLoginMode ? AppColors.saffronPrimary : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(
+                                color: _isLoginMode ? AppColors.saffronPrimary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12)),
                             alignment: Alignment.center,
-                            child: Text('Sign In', style: TextStyle(fontWeight: FontWeight.bold, color: _isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text('Sign In',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _isLoginMode ? Colors.white : AppColors.textMuted)),
                           ),
                         ),
                       ),
@@ -1119,45 +1303,49 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 24),
                 if (_isLoginMode) ...[
                   if (_updateNoticeMessage != null) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      border: Border.all(color: AppColors.saffronDark),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          _updateNoticeMessage!,
-                          style: const TextStyle(color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.saffronDark,
-                            foregroundColor: Colors.white,
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        border: Border.all(color: AppColors.saffronDark),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            _updateNoticeMessage!,
+                            style: const TextStyle(
+                                color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center,
                           ),
-                          icon: const Icon(Icons.download, size: 16),
-                          label: const Text('Update App Now'),
-                          onPressed: () async {
-                            if (_updateNoticeUrl != null) {
-                              final uri = Uri.parse(_updateNoticeUrl!);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.saffronDark,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(Icons.download, size: 16),
+                            label: const Text('Update App Now'),
+                            onPressed: () async {
+                              if (_updateNoticeUrl != null) {
+                                final uri = Uri.parse(_updateNoticeUrl!);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
                               }
-                            }
-                          },
-                        ),
-                      ],
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
                   TextFormField(
                     controller: _emailController,
-                    decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                    decoration: InputDecoration(
+                        labelText: 'Email Address',
+                        prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -1167,7 +1355,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscureLoginPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
+                        icon: Icon(_obscureLoginPassword ? Icons.visibility_off : Icons.visibility,
+                            color: AppColors.textMuted),
                         onPressed: () => setState(() => _obscureLoginPassword = !_obscureLoginPassword),
                       ),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
@@ -1180,11 +1369,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       key: _formKeyStep0,
                       child: Column(
                         children: [
-                          TextFormField(controller: _nameController, decoration: InputDecoration(labelText: 'Full / Initiated Name', prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _nameController,
+                              decoration: InputDecoration(
+                                  labelText: 'Full / Initiated Name',
+                                  prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _phoneController,
+                              decoration: InputDecoration(
+                                  labelText: 'Phone Number',
+                                  prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _emailController, decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _emailController,
+                              decoration: InputDecoration(
+                                  labelText: 'Email Address',
+                                  prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _passwordController,
@@ -1192,7 +1396,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             decoration: InputDecoration(
                               labelText: 'Password (6+ chars)',
                               prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
-                              suffixIcon: IconButton(icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted), onPressed: () => setState(() => _obscureRegisterPassword = !_obscureRegisterPassword)),
+                              suffixIcon: IconButton(
+                                  icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility,
+                                      color: AppColors.textMuted),
+                                  onPressed: () =>
+                                      setState(() => _obscureRegisterPassword = !_obscureRegisterPassword)),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                             ),
                           ),
@@ -1205,31 +1413,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       child: Column(
                         children: [
                           Card(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.borderSubtle)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                side: const BorderSide(color: AppColors.borderSubtle)),
                             child: ListTile(
                               leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-                              title: Text(_selectedDob == null ? 'Date of Birth (DOB)' : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
+                              title: Text(_selectedDob == null
+                                  ? 'Date of Birth (DOB)'
+                                  : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
                               trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
                               onTap: () async {
-                                final picked = await showDatePicker(context: context, initialDate: DateTime(2000, 1, 1), firstDate: DateTime(1940), lastDate: DateTime.now());
+                                final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime(2000, 1, 1),
+                                    firstDate: DateTime(1940),
+                                    lastDate: DateTime.now());
                                 if (picked != null) setState(() => _selectedDob = picked);
                               },
                             ),
                           ),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _professionController, decoration: InputDecoration(labelText: 'Profession', prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _professionController,
+                              decoration: InputDecoration(
+                                  labelText: 'Profession',
+                                  prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _educationController, decoration: InputDecoration(labelText: 'Qualification', prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _educationController,
+                              decoration: InputDecoration(
+                                  labelText: 'Qualification',
+                                  prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                           const SizedBox(height: 14),
-                          TextFormField(controller: _addressController, decoration: InputDecoration(labelText: 'City / Address', prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
+                          TextFormField(
+                              controller: _addressController,
+                              decoration: InputDecoration(
+                                  labelText: 'City / Address',
+                                  prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
                         ],
                       ),
                     )
                   else
                     DropdownButtonFormField<String>(
                       initialValue: _selectedPreacherId,
-                      decoration: InputDecoration(labelText: 'Assigned Preacher', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
-                      items: _preachersList.map((p) => DropdownMenuItem<String>(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+                      decoration: InputDecoration(
+                          labelText: 'Assigned Preacher',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
+                      items: _preachersList
+                          .map((p) => DropdownMenuItem<String>(
+                              value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})')))
+                          .toList(),
                       onChanged: (val) => setState(() => _selectedPreacherId = val),
                     ),
                 ],
@@ -1239,29 +1476,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   height: 50,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary),
-                    onPressed: _isLoading ? null : () {
-                      if (_isLoginMode) {
-                        _handleAuth();
-                      } else {
-                        if (_currentStep < 2) {
-                          setState(() => _currentStep++);
-                        } else {
-                          _handleAuth();
-                        }
-                      }
-                    },
-                    child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(_isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step' : 'Complete Registration'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            if (_isLoginMode) {
+                              _handleAuth();
+                            } else {
+                              if (_currentStep < 2) {
+                                setState(() => _currentStep++);
+                              } else {
+                                _handleAuth();
+                              }
+                            }
+                          },
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(_isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step' : 'Complete Registration'),
+                            style:
+                                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 46),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                   icon: const Icon(Icons.account_circle, color: AppColors.saffronDark),
-                  label: const Text('One-Tap Google Sign-In', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
+                  label: const Text('One-Tap Google Sign-In',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
                   onPressed: _isLoading ? null : _handleGoogleSignIn,
                 ),
                 if (!_isLoginMode && _currentStep > 0)
-                  TextButton(onPressed: () => setState(() => _currentStep--), child: const Text('Back to previous step', style: TextStyle(color: AppColors.textMuted))),
+                  TextButton(
+                      onPressed: () => setState(() => _currentStep--),
+                      child: const Text('Back to previous step', style: TextStyle(color: AppColors.textMuted))),
               ],
             ),
           ),
@@ -1333,9 +1581,18 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = const [
-        NavigationDestination(icon: Icon(Icons.admin_panel_settings_outlined), selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark), label: 'Admin'),
-        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+        NavigationDestination(
+            icon: Icon(Icons.admin_panel_settings_outlined),
+            selectedIcon: Icon(Icons.admin_panel_settings, color: AppColors.saffronDark),
+            label: 'Admin'),
+        NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark),
+            label: 'Standings'),
+        NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person, color: AppColors.saffronDark),
+            label: 'Profile'),
       ];
     } else if (isPreacher) {
       screens = [
@@ -1344,9 +1601,18 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = const [
-        NavigationDestination(icon: Icon(Icons.temple_hindu_outlined), selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark), label: 'Counselees'),
-        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+        NavigationDestination(
+            icon: Icon(Icons.temple_hindu_outlined),
+            selectedIcon: Icon(Icons.temple_hindu, color: AppColors.saffronDark),
+            label: 'Counselees'),
+        NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark),
+            label: 'Standings'),
+        NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person, color: AppColors.saffronDark),
+            label: 'Profile'),
       ];
     } else {
       screens = [
@@ -1355,9 +1621,18 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
         ProfileDashboardScreen(userRole: _userRole),
       ];
       destinations = const [
-        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: AppColors.saffronDark), label: 'Home'),
-        NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark), label: 'Standings'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: AppColors.saffronDark), label: 'Profile'),
+        NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home, color: AppColors.saffronDark),
+            label: 'Home'),
+        NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events, color: AppColors.saffronDark),
+            label: 'Standings'),
+        NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person, color: AppColors.saffronDark),
+            label: 'Profile'),
       ];
     }
 
@@ -1375,7 +1650,6 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
     );
   }
 }
-
 class DevoteeSelfDashboardScreen extends StatefulWidget {
   final String userRole;
   const DevoteeSelfDashboardScreen({super.key, required this.userRole});
@@ -1420,7 +1694,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           .single();
       final pTitle = (userProf['preachers'] as Map<String, dynamic>?)?['display_title']?.toString();
       final pId = userProf['preacher_id']?.toString();
-      final badge = userProf['avatar_badge']?.toString() ?? '📿';
+      final badge = userProf['avatar_badge']?.toString() ?? '';
       final dob = userProf['date_of_birth']?.toString();
 
       final res = await supabase
@@ -1581,7 +1855,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     if (user == null) return;
 
     final now = DateTime.now();
-    // Generate the last 3 calendar months
     final List<DateTime> candidateMonths = [
       DateTime(now.year, now.month, 1),
       DateTime(now.year, now.month - 1, 1),
@@ -1711,7 +1984,14 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Sadhna Journey'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            VaishnavaTilakLogo(size: 26),
+            SizedBox(width: 10),
+            Text('My Sadhna Journey'),
+          ],
+        ),
         actions: [
           ..._buildCommonAppBarActions(context, widget.userRole),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
@@ -1901,7 +2181,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     // --- SACRED ACHIEVEMENTS & MILESTONE ROADMAP ---
                     Builder(
                       builder: (context) {
-                        // 1. Brahma Muhurta check (Wake up <= 4:30 AM)
                         final hasBrahmaMuhurta = stats.recent.any((e) {
                           final parts = e.wakeUpTime.split(':');
                           if (parts.length >= 2) {
@@ -1912,13 +2191,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           return false;
                         });
 
-                        // 2. Active Consistent Streak check (>= 3 days)
                         final hasStreak = stats.currentStreak >= 3;
-
-                        // 3. Harinam Premi check (>= 64 rounds)
                         final hasHarinamPremi = stats.totalRounds >= 64;
-
-                        // 4. Shloka Sadhak check (memorized verses)
                         final totalShlokas = stats.recent.fold<int>(0, (sum, e) => sum + e.shlokasMemorized);
                         final hasShlokas = totalShlokas > 0;
 
@@ -2025,7 +2299,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                         );
                       },
                     ),
-                    
+
                     const SizedBox(height: 18),
 
                     // --- MONTHWISE PDF DOWNLOAD BUTTON ---
@@ -2311,7 +2585,57 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildSliderStepperCard(title: 'Japa Meditation Rounds', value: _rounds, min: 0, max: 64, step: 1, unit: 'rounds', onChanged: (v) => setState(() => _rounds = v)),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: AppColors.borderSubtle),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Japa Meditation Rounds',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('$_rounds rounds',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [16, 20, 25, 32, 64].map((preset) {
+                          final isSelected = _rounds == preset;
+                          return ChoiceChip(
+                            label: Text('$preset'),
+                            selected: isSelected,
+                            selectedColor: AppColors.saffronPrimary,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : AppColors.textDark,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                            onSelected: (_) => setState(() => _rounds = preset),
+                          );
+                        }).toList(),
+                      ),
+                      Slider(
+                        value: _rounds.toDouble(),
+                        min: 0,
+                        max: 64,
+                        divisions: 64,
+                        onChanged: (newVal) => setState(() => _rounds = newVal.round()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               _buildSliderStepperCard(title: 'SP Book Reading', value: _spReadingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spReadingMinutes = v)),
               _buildSliderStepperCard(title: 'SP Lecture Hearing', value: _spLectureMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spLectureMinutes = v)),
               _buildSliderStepperCard(title: 'Other Spiritual Hearing', value: _otherHearingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _otherHearingMinutes = v)),
@@ -2391,7 +2715,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
           role: map['role']?.toString() ?? 'counselee',
           preacherId: map['preacher_id']?.toString(),
           preacherTitle: pr?['display_title']?.toString() ?? 'None',
-          avatarBadge: map['avatar_badge']?.toString() ?? '📿',
+          avatarBadge: map['avatar_badge']?.toString() ?? '',
           dateOfBirth: map['date_of_birth']?.toString(),
         );
       }).toList();
@@ -2402,7 +2726,6 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     }
   }
 
-  
   void _showCreateCounseleeDialog(List<PreacherItem> preachers) {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
@@ -2516,7 +2839,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     );
   }
 
-    void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
+  void _showEditDevoteeDialog(DevoteeProfileItem devotee, List<PreacherItem> preachers) {
     final nameCtrl = TextEditingController(text: devotee.fullName);
     final emailCtrl = TextEditingController(text: devotee.email);
     final passCtrl = TextEditingController();
@@ -2545,7 +2868,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                 const SizedBox(height: 10),
                 TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 📿, 🌸, 👑)', border: OutlineInputBorder())),
+                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🌅, 🔥, 👑)', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
@@ -2584,7 +2907,6 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
               onPressed: () async {
                 try {
-                  // Call admin credentials procedure if email or password was edited
                   if ((emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != devotee.email) || passCtrl.text.trim().isNotEmpty) {
                     await supabase.rpc('admin_update_user_credentials', params: {
                       'p_target_user_id': devotee.id,
@@ -2598,7 +2920,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                     'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
                     'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
                     'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                    'avatar_badge': badgeCtrl.text.trim().isEmpty ? '📿' : badgeCtrl.text.trim(),
+                    'avatar_badge': badgeCtrl.text.trim(),
                     'role': selectedRole,
                     'preacher_id': selectedPreacher,
                   }).eq('id', devotee.id);
@@ -2693,14 +3015,14 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   ...filteredDevotees.map((d) => Card(
                     child: ListTile(
                       title: Row(
-  children: [
-    Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-    if (d.avatarBadge.trim().isNotEmpty && d.avatarBadge != '📿') ...[
-      const SizedBox(width: 6),
-      Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
-    ],
-  ],
-),
+                        children: [
+                          Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          if (d.avatarBadge.trim().isNotEmpty && d.avatarBadge != '📿') ...[
+                            const SizedBox(width: 6),
+                            Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
+                          ],
+                        ],
+                      ),
                       subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Circle: ${d.preacherTitle}'),
                       trailing: IconButton(
                         icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 28),
@@ -2760,7 +3082,6 @@ class PreacherConsoleScreen extends StatefulWidget {
 }
 
 class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
-
   void _showPreacherAddCounseleeDialog() {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
@@ -2868,7 +3189,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
           preacherId: m['preacher_id']?.toString(),
           preacherTitle: 'My Group',
           latestEntryDate: lastDate,
-          avatarBadge: m['avatar_badge']?.toString() ?? '📿',
+          avatarBadge: m['avatar_badge']?.toString() ?? '',
           dateOfBirth: m['date_of_birth']?.toString(),
         );
       }).toList();
@@ -2903,7 +3224,6 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -2916,7 +3236,6 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 14),
                 TextField(
                   decoration: InputDecoration(hintText: 'Search counselees...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
@@ -2926,12 +3245,12 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 ...filtered.map((c) => Card(
                   child: ListTile(
                     title: Text(
-  (c.avatarBadge.trim().isNotEmpty && c.avatarBadge != '📿')
-      ? '${c.fullName} ${c.avatarBadge}'
-      : c.fullName,
-  style: const TextStyle(fontWeight: FontWeight.bold),
-),
-subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}'),
+                      (c.avatarBadge.trim().isNotEmpty && c.avatarBadge != '📿')
+                          ? '${c.fullName} ${c.avatarBadge}'
+                          : c.fullName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}'),
                   ),
                 )),
               ],
@@ -2953,18 +3272,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   String? _selectedPreacherId;
   List<PreacherItem> _preachers = [];
   bool _hideMyName = false;
-  late Future<List<RankingItem>> _rankingsFuture; // <--- ADD THIS
+  late Future<List<RankingItem>> _rankingsFuture;
 
-  void _refreshRankings() { // <--- ADD THIS HELPER
+  void _refreshRankings() {
     setState(() {
       _rankingsFuture = _fetchTopRankings();
     });
   }
 
- @override
+  @override
   void initState() {
     super.initState();
-    _rankingsFuture = _fetchTopRankings(); // <--- ADD THIS LINE
+    _rankingsFuture = _fetchTopRankings();
     _fetchPreachersAndProfile();
   }
 
@@ -3079,7 +3398,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
                             title: Row(
-                             children: [
+                              children: [
                                 Text(
                                   item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName,
                                   style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold),
@@ -3127,7 +3446,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 }
-
 
 class WebApkDownloadBanner extends StatelessWidget {
   const WebApkDownloadBanner({super.key});
@@ -3237,6 +3555,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
       ),
     );
   }
+
   Future<void> _postAppUpdateAnnouncement({
     required String title,
     required String message,
@@ -3325,47 +3644,55 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
-              onPressed: () async {
-                try {
-                  final user = supabase.auth.currentUser;
-                  if (user != null) {
-                    if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
-                      await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
-                    }
-                    if (passCtrl.text.trim().isNotEmpty) {
-                      await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
-                    }
-                    await supabase.from('profiles').update({
-                      'full_name': nameCtrl.text.trim(),
-                      'email': emailCtrl.text.trim(),
-                      'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                      'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
-                      'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
-                      'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                      'preacher_id': selectedPreacherId,
-                    }).eq('id', user.id);
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.saffronDark,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  // 1. Capture references before any async gap
+                  final nav = Navigator.of(ctx);
+                  final messenger = ScaffoldMessenger.of(context);
 
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                    }
-                    if (mounted) {
+                  try {
+                    final user = supabase.auth.currentUser;
+                    if (user != null) {
+                      if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
+                        await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
+                      }
+                      if (passCtrl.text.trim().isNotEmpty) {
+                        await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
+                      }
+                      await supabase.from('profiles').update({
+                        'full_name': nameCtrl.text.trim(),
+                        'email': emailCtrl.text.trim(),
+                        'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                        'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                        'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                        'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                        'preacher_id': selectedPreacherId,
+                      }).eq('id', user.id);
+
+                      // 2. Dismiss dialog if dialog context is still valid
+                      if (ctx.mounted) {
+                        nav.pop();
+                      }
+
+                      // 3. Update parent state and display notification if parent is mounted
+                      if (!mounted) return;
                       _fetchProfile();
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         const SnackBar(content: Text('Profile details updated successfully.')),
                       );
                     }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                  } catch (e) {
+                    if (!mounted) return;
+                    messenger.showSnackBar(
                       SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
                     );
                   }
-                }
-              },
-              child: const Text('Save Details'),
-            ),
+                },
+                child: const Text('Save Details'),
+              ),
           ],
         ),
       ),
@@ -3388,8 +3715,8 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
       body: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 550),
-          padding: const EdgeInsets.all(24),
           child: ListView(
+            padding: const EdgeInsets.all(24),
             children: [
               Center(
                 child: Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -3409,10 +3736,10 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   icon: const Icon(Icons.campaign),
                   label: const Text('Broadcast App Update Notice'),
                   onPressed: () => _postAppUpdateAnnouncement(
-                    title: '🚀 New Update Available (v1.0.19)',
-                    message: 'A fresh update (Build 20) is live with bug fixes. Tap to update your app.',
+                    title: '🚀 New Update Available (v1.0.21)',
+                    message: 'A fresh update (Build 22) is live with bug fixes. Tap to update your app.',
                     apkDownloadUrl: 'https://my-sadhna-psi.vercel.app/downloads/my_sadhna.apk',
-                    targetBuildCode: 20,
+                    targetBuildCode: 22,
                   ),
                 ),
               ] else ...[
@@ -3422,7 +3749,15 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        ListTile(title: const Text('Emblem Badge'), trailing: Text(_profileData?['avatar_badge']?.toString() ?? '📿', style: const TextStyle(fontSize: 20))),
+                        ListTile(
+                          title: const Text('Emblem Badge'),
+                          trailing: Text(
+                            (_profileData?['avatar_badge']?.toString().isNotEmpty ?? false) && _profileData?['avatar_badge'] != '📿'
+                                ? _profileData!['avatar_badge'].toString()
+                                : 'None',
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                        ),
                         const Divider(),
                         ListTile(title: const Text('Phone'), trailing: Text(_profileData?['phone_number'] ?? 'Not set')),
                         const Divider(),
@@ -3454,7 +3789,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.20 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.21 (Build $kCurrentInstalledVersionCode)',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
