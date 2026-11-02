@@ -2163,350 +2163,346 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            VaishnavaTilakLogo(size: 26),
-            SizedBox(width: 10),
-            Text('My Sadhna Journey'),
-          ],
-        ),
-        actions: [
-          ..._buildCommonAppBarActions(context, widget.userRole),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
-        ],
-      ),
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: FutureBuilder<PersonalStats>(
-            future: _statsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final stats = snapshot.data ??
-                  const PersonalStats(
-                    totalSP: 0,
-                    avgSP: 0,
-                    totalRounds: 0,
-                    count: 0,
-                    currentStreak: 0,
-                    longestStreak: 0,
-                    hasLoggedToday: false,
-                    todayEntry: null,
-                    recent: [],
-                  );
+    return ValueListenableBuilder<String>(
+      valueListenable: appLanguage,
+      builder: (context, lang, _) {
+        final isHindi = lang == 'hi';
 
-              final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-              final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
-              final hasToday = stats.recent.any((e) => e.entryDate == todayStr);
-              final hasYest = stats.recent.any((e) => e.entryDate == yestStr);
-              final bool bothSubmitted = hasToday && hasYest;
-              final namesCount = stats.totalRounds * 1728;
+        return Scaffold(
+          appBar: AppBar(
+            titleSpacing: 8,
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const VaishnavaTilakLogo(size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  isHindi ? 'मेरी साधना' : 'My Sadhna',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            actions: [
+              ..._buildCommonAppBarActions(context, widget.userRole),
+              IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshStats),
+            ],
+          ),
+          body: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: FutureBuilder<PersonalStats>(
+                future: _statsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final stats = snapshot.data ??
+                      const PersonalStats(
+                        totalSP: 0,
+                        avgSP: 0,
+                        totalRounds: 0,
+                        count: 0,
+                        currentStreak: 0,
+                        longestStreak: 0,
+                        hasLoggedToday: false,
+                        todayEntry: null,
+                        recent: [],
+                      );
 
-              return RefreshIndicator(
-                onRefresh: () async {
-                  _refreshStats();
-                  await _statsFuture;
-                },
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('ACCUMULATED SUKRITI POINTS',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Text(stats.totalSP.toStringAsFixed(0),
-                              style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
-                          Text(
-                              'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)',
-                              style: const TextStyle(color: Colors.white, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
-                        border: Border.all(
-                            color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
-                            foregroundColor: Colors.white,
-                            child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  bothSubmitted
-                                      ? "Sadhana Offered (Today & Yesterday)"
-                                      : (hasToday
-                                          ? "Today Offered • Yesterday Pending"
-                                          : "Today's Sadhana Pending"),
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                                Text(
-                                  stats.hasLoggedToday
-                                      ? 'Offering recorded for today'
-                                      : 'Log before midnight to keep your active streak',
-                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark,
-                                foregroundColor: Colors.white),
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry)));
-                              if (result == true) _refreshStats();
-                            },
-                            child: Text(bothSubmitted ? 'Edit Sadhna' : 'Submit Sadhna'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
+                  final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                  final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+                  final hasToday = stats.recent.any((e) => e.entryDate == todayStr);
+                  final hasYest = stats.recent.any((e) => e.entryDate == yestStr);
+                  final bool bothSubmitted = hasToday && hasYest;
+                  final namesCount = stats.totalRounds * 1728;
+                  final nectar = PrabhupadaNectar.getQuoteForToday();
+
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      _refreshStats();
+                      await _statsFuture;
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppColors.borderSubtle)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: const [
-                                    Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
-                                    SizedBox(width: 6),
-                                    Text('Active Streak',
-                                        style: TextStyle(
-                                            fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text('${stats.currentStreak} Days',
-                                    style: const TextStyle(
-                                        fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFFEA580C))),
-                                Text('Best: ${stats.longestStreak} Days',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppColors.borderSubtle)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: const [
-                                    Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
-                                    SizedBox(width: 6),
-                                    Text('30-Day Rounds',
-                                        style: TextStyle(
-                                            fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text('${stats.totalRounds}',
-                                    style: const TextStyle(
-                                        fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.tulsiGreen)),
-                                Text('${formatIndianNumber(namesCount)} Holy Names',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    SukritiBadgesCard(
-                      totalRoundsMonth: stats.totalRounds,
-                      consecutiveDays: stats.currentStreak,
-                    ),
-                    const SizedBox(height: 18),
-                    _buildHeatmapGrid(stats.recent),
-
-                    // --- SACRED ACHIEVEMENTS & MILESTONE ROADMAP ---
-                    Builder(
-                      builder: (context) {
-                        final hasBrahmaMuhurta = stats.recent.any((e) {
-                          final parts = e.wakeUpTime.split(':');
-                          if (parts.length >= 2) {
-                            final h = int.tryParse(parts[0]) ?? 24;
-                            final m = int.tryParse(parts[1]) ?? 60;
-                            return (h * 60 + m) <= (4 * 60 + 30);
-                          }
-                          return false;
-                        });
-
-                        final hasStreak = stats.currentStreak >= 3;
-                        final hasHarinamPremi = stats.totalRounds >= 64;
-                        final totalShlokas = stats.recent.fold<int>(0, (sum, e) => sum + e.shlokasMemorized);
-                        final hasShlokas = totalShlokas > 0;
-
-                        Widget buildBadgeItem({
-                          required String icon,
-                          required String title,
-                          required String condition,
-                          required bool isUnlocked,
-                        }) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isUnlocked ? const Color(0xFFF0FDF4) : Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isUnlocked ? const Color(0xFF86EFAC) : Colors.grey.shade300,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(icon, style: TextStyle(fontSize: 20, color: isUnlocked ? null : Colors.grey)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: isUnlocked ? AppColors.textDark : Colors.grey.shade600,
-                                        ),
-                                      ),
-                                      Text(
-                                        condition,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isUnlocked ? AppColors.tulsiSoft : Colors.grey.shade500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  isUnlocked ? Icons.check_circle : Icons.lock_outline,
-                                  size: 18,
-                                  color: isUnlocked ? const Color(0xFF16A34A) : Colors.grey.shade400,
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return Container(
-                          margin: const EdgeInsets.only(top: 18),
-                          padding: const EdgeInsets.all(16),
+                        // --- DAILY PRABHUPADA NECTAR CARD ---
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.saffronPrimary.withValues(alpha: 0.12),
+                                AppColors.goldAccent.withValues(alpha: 0.05),
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.borderSubtle),
+                            border: Border.all(color: AppColors.saffronPrimary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('🪷', style: TextStyle(fontSize: 22)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isHindi ? (nectar['hi'] ?? '') : (nectar['en'] ?? ''),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontStyle: FontStyle.italic,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textDark,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '— ${nectar['ref']}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.saffronDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // --- ACCUMULATED SUKRITI POINTS ---
+                        Container(
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
+                            borderRadius: BorderRadius.circular(22),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Sacred Milestones & Badges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  Text(
-                                    hasBrahmaMuhurta || hasStreak || hasHarinamPremi || hasShlokas ? 'In Progress' : 'No Badges Yet',
-                                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600),
-                                  ),
-                                ],
+                              Text(
+                                isHindi ? 'संचित सुकृति अंक' : 'ACCUMULATED SUKRITI POINTS',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  letterSpacing: 1.2,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const SizedBox(height: 10),
-                              buildBadgeItem(
-                                icon: '🌅',
-                                title: 'Brahma Muhurta Sadhak',
-                                condition: 'Unlocked by waking up at or before 4:30 AM',
-                                isUnlocked: hasBrahmaMuhurta,
+                              const SizedBox(height: 6),
+                              Text(
+                                stats.totalSP.toStringAsFixed(0),
+                                style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
                               ),
-                              buildBadgeItem(
-                                icon: '🔥',
-                                title: 'Sadhana Fire',
-                                condition: 'Unlocked by maintaining an active streak of 3+ days',
-                                isUnlocked: hasStreak,
-                              ),
-                              buildBadgeItem(
-                                icon: '👑',
-                                title: 'Harinam Premi',
-                                condition: 'Unlocked by completing 64+ rounds in the current month',
-                                isUnlocked: hasHarinamPremi,
-                              ),
-                              buildBadgeItem(
-                                icon: '📖',
-                                title: 'Shloka Sadhak',
-                                condition: 'Unlocked by memorizing spiritual verses',
-                                isUnlocked: hasShlokas,
+                              Text(
+                                isHindi
+                                    ? 'औसत: ${stats.avgSP.toStringAsFixed(1)} SP / दिन • ${stats.count} दिन दर्ज (पिछले ३० दिन)'
+                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)',
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                        const SizedBox(height: 18),
 
-                    const SizedBox(height: 18),
+                        // --- DAILY STATUS / OFFERING CARD ---
+                        Container(
+                          decoration: BoxDecoration(
+                            color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
+                            border: Border.all(
+                              color: stats.hasLoggedToday ? const Color(0xFF10B981) : AppColors.saffronPrimary,
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
+                                foregroundColor: Colors.white,
+                                child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      bothSubmitted
+                                          ? (isHindi ? "साधना अर्पित (आज और कल)" : "Sadhana Offered (Today & Yesterday)")
+                                          : (hasToday
+                                              ? (isHindi ? "आज अर्पित • कल लंबित" : "Today Offered • Yesterday Pending")
+                                              : (isHindi ? "आज की साधना लंबित" : "Today's Sadhana Pending")),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                    ),
+                                    Text(
+                                      stats.hasLoggedToday
+                                          ? (isHindi ? 'आज की साधना दर्ज कर ली गई है' : 'Offering recorded for today')
+                                          : (isHindi
+                                              ? 'निरंतरता बनाए रखने हेतु मध्यरात्रि से पहले भरें'
+                                              : 'Log before midnight to keep your active streak'),
+                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DailySadhanaEntryScreen(existingRecord: stats.todayEntry),
+                                    ),
+                                  );
+                                  if (result == true) _refreshStats();
+                                },
+                                child: Text(
+                                  bothSubmitted
+                                      ? (isHindi ? 'संशोधन करें' : 'Edit Sadhna')
+                                      : (isHindi ? 'अर्पित करें' : 'Submit Sadhna'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
 
-                    // --- MONTHWISE PDF DOWNLOAD BUTTON ---
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 46),
-                        side: const BorderSide(color: AppColors.saffronDark),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
-                      label: const Text('Download Monthly Sadhana PDF',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                      onPressed: () => _showMonthPickerAndDownload(context),
+                        // --- STREAK & 30-DAY STATS ROW ---
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppColors.borderSubtle),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.local_fire_department, color: Color(0xFFEA580C), size: 20),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isHindi ? 'सक्रिय निरंतरता' : 'Active Streak',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '${stats.currentStreak} ${isHindi ? "दिन" : "Days"}',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFFEA580C),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${isHindi ? "सर्वश्रेष्ठ" : "Best"}: ${stats.longestStreak} ${isHindi ? "दिन" : "Days"}',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppColors.borderSubtle),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.donut_large, color: AppColors.tulsiGreen, size: 20),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isHindi ? '३०-दिवसीय माला' : '30-Day Rounds',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '${stats.totalRounds}',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.tulsiGreen,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${formatIndianNumber(namesCount)} ${isHindi ? "पवित्र नाम" : "Holy Names"}',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+
+                        // --- SINGLE CONSOLIDATED SUKRITI BADGES CARD ---
+                        SukritiBadgesCard(
+                          totalRoundsMonth: stats.totalRounds,
+                          consecutiveDays: stats.currentStreak,
+                        ),
+                        const SizedBox(height: 18),
+
+                        // --- MONTHLY HEATMAP GRID ---
+                        _buildHeatmapGrid(stats.recent),
+                        const SizedBox(height: 18),
+
+                        // --- MONTHLY PDF DOWNLOAD BUTTON ---
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 46),
+                            side: const BorderSide(color: AppColors.saffronDark),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.picture_as_pdf, color: AppColors.saffronDark),
+                          label: Text(
+                            isHindi ? 'मासिक साधना रिपोर्ट डाउनलोड करें (PDF)' : 'Download Monthly Sadhana PDF',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark),
+                          ),
+                          onPressed: () => _showMonthPickerAndDownload(context),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -4136,9 +4132,15 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final profCtrl = TextEditingController(text: _profileData?['profession'] ?? '');
     final eduCtrl = TextEditingController(text: _profileData?['education'] ?? '');
     final addrCtrl = TextEditingController(text: _profileData?['address'] ?? '');
+    final badgeCtrl = TextEditingController(text: _profileData?['avatar_badge'] ?? '');
     final emailCtrl = TextEditingController(text: supabase.auth.currentUser?.email ?? '');
     final passCtrl = TextEditingController();
     String? selectedPreacherId = _profileData?['preacher_id']?.toString();
+
+    DateTime? selectedDob;
+    if (_profileData?['date_of_birth'] != null && _profileData!['date_of_birth'].toString().isNotEmpty) {
+      selectedDob = DateTime.tryParse(_profileData!['date_of_birth'].toString());
+    }
 
     final List preachersList = [];
     try {
@@ -4152,88 +4154,143 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (dialogContext, setDlgState) => AlertDialog(
           title: const Text('Edit Complete Profile Details'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'New Password (leave empty to keep current)', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedPreacherId,
-                  decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
-                  items: preachersList.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(
-                    value: p['id'].toString(),
-                    child: Text('${p['display_title']} (${p['code_suffix']})'),
-                  )).toList(),
-                  onChanged: (val) => setDlgState(() => selectedPreacherId = val),
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
-              ],
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'New Password (leave empty to keep current)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: AppColors.borderSubtle),
+                    ),
+                    margin: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
+                      title: Text(selectedDob == null ? 'Date of Birth (DOB)' : DateFormat('dd MMMM yyyy').format(selectedDob!)),
+                      trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDob ?? DateTime(2000, 1, 1),
+                          firstDate: DateTime(1940),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDlgState(() => selectedDob = picked);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: badgeCtrl,
+                    decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🪷, 🌅, 🔥, 👑)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedPreacherId,
+                    decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
+                    items: preachersList.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(
+                      value: p['id'].toString(),
+                      child: Text('${p['display_title']} (${p['code_suffix']})'),
+                    )).toList(),
+                    onChanged: (val) => setDlgState(() => selectedPreacherId = val),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: profCtrl,
+                    decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: eduCtrl,
+                    decoration: const InputDecoration(labelText: 'Qualification', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: addrCtrl,
+                    decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.saffronDark,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () async {
-                  // 1. Capture references before any async gap
-                  final nav = Navigator.of(ctx);
-                  final messenger = ScaffoldMessenger.of(context);
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.saffronDark,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final nav = Navigator.of(ctx);
+                final messenger = ScaffoldMessenger.of(context);
 
-                  try {
-                    final user = supabase.auth.currentUser;
-                    if (user != null) {
-                      if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
-                        await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
-                      }
-                      if (passCtrl.text.trim().isNotEmpty) {
-                        await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
-                      }
-                      await supabase.from('profiles').update({
-                        'full_name': nameCtrl.text.trim(),
-                        'email': emailCtrl.text.trim(),
-                        'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                        'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
-                        'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
-                        'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                        'preacher_id': selectedPreacherId,
-                      }).eq('id', user.id);
-
-                      // 2. Dismiss dialog if dialog context is still valid
-                      if (ctx.mounted) {
-                        nav.pop();
-                      }
-
-                      // 3. Update parent state and display notification if parent is mounted
-                      if (!mounted) return;
-                      _fetchProfile();
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('Profile details updated successfully.')),
-                      );
+                try {
+                  final user = supabase.auth.currentUser;
+                  if (user != null) {
+                    if (emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != user.email) {
+                      await supabase.auth.updateUser(UserAttributes(email: emailCtrl.text.trim()));
                     }
-                  } catch (e) {
+                    if (passCtrl.text.trim().isNotEmpty) {
+                      await supabase.auth.updateUser(UserAttributes(password: passCtrl.text.trim()));
+                    }
+                    await supabase.from('profiles').update({
+                      'full_name': nameCtrl.text.trim(),
+                      'email': emailCtrl.text.trim(),
+                      'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                      'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
+                      'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
+                      'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                      'avatar_badge': badgeCtrl.text.trim(),
+                      'date_of_birth': selectedDob != null ? DateFormat('yyyy-MM-dd').format(selectedDob!) : null,
+                      'preacher_id': selectedPreacherId,
+                    }).eq('id', user.id);
+
+                    if (ctx.mounted) {
+                      nav.pop();
+                    }
+
                     if (!mounted) return;
+                    _fetchProfile();
                     messenger.showSnackBar(
-                      SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+                      const SnackBar(content: Text('Profile details updated successfully.')),
                     );
                   }
-                },
-                child: const Text('Save Details'),
-              ),
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+                  );
+                }
+              },
+              child: const Text('Save Details'),
+            ),
           ],
         ),
       ),
