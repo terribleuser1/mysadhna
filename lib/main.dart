@@ -21,7 +21,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 23; // Matched with build +22
+const int kCurrentInstalledVersionCode = 24; // Matched with build +22
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -2116,31 +2116,60 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       final doc = pw.Document();
       final totalSP = entries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
       final totalRounds = entries.fold<int>(0, (sum, e) => sum + e.chantingRounds);
+      final totalBookMins = entries.fold<int>(0, (sum, e) => sum + e.spBookReadingMinutes);
+      final totalHearingMins = entries.fold<int>(0, (sum, e) => sum + e.spLectureMinutes + e.otherHearingMinutes);
+      final totalShlokas = entries.fold<int>(0, (sum, e) => sum + e.shlokasMemorized);
 
       doc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.a4,
+          pageFormat: PdfPageFormat.a4.landscape,
           build: (pw.Context ctx) {
             return pw.Padding(
-              padding: const pw.EdgeInsets.all(24),
+              padding: const pw.EdgeInsets.all(20),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('My Sadhna - Monthly Report ($monthTitle)',
-                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 8),
-                  pw.Text('Total SP: ${totalSP.toStringAsFixed(0)} | Total Rounds: $totalRounds | Days Recorded: ${entries.length}'),
+                  pw.Text(
+                    'My Sadhna - Monthly Devotional Offering (' + monthTitle + ')',
+                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    'Total SP: ' + totalSP.toStringAsFixed(0) +
+                    ' | Rounds: ' + totalRounds.toString() +
+                    ' | Reading: ' + totalBookMins.toString() + 'm' +
+                    ' | Hearing: ' + totalHearingMins.toString() + 'm' +
+                    ' | Shlokas: ' + totalShlokas.toString() +
+                    ' | Days: ' + entries.length.toString(),
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
                   pw.Divider(thickness: 1),
-                  pw.SizedBox(height: 12),
+                  pw.SizedBox(height: 10),
                   pw.TableHelper.fromTextArray(
-                    headers: ['Date', 'Wake Up', 'Bed Time', 'Rounds', 'Score'],
+                    headers: [
+                      'Date',
+                      'Wake-up',
+                      'Bedtime',
+                      'Rounds',
+                      'SP Book',
+                      'SP Class',
+                      'Other Hearing',
+                      'Shlokas',
+                      'Score'
+                    ],
                     data: entries.map((e) => [
-                          e.entryDate,
-                          e.wakeUpTime,
-                          e.bedTime,
-                          '${e.chantingRounds}',
-                          e.calculatedScore.toStringAsFixed(1),
-                        ]).toList(),
+                      e.entryDate,
+                      e.wakeUpTime,
+                      e.bedTime,
+                      e.chantingRounds.toString(),
+                      e.spBookReadingMinutes.toString() + 'm',
+                      e.spLectureMinutes.toString() + 'm',
+                      e.otherHearingMinutes.toString() + 'm',
+                      e.shlokasMemorized.toString(),
+                      e.calculatedScore.toStringAsFixed(1),
+                    ]).toList(),
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+                    cellStyle: const pw.TextStyle(fontSize: 8),
                   ),
                 ],
               ),
@@ -2151,12 +2180,11 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => doc.save(),
-        name: 'Sadhana_Report_${monthTitle.replaceAll(' ', '_')}.pdf',
+        name: 'Sadhana_Report_' + monthTitle.replaceAll(' ', '_') + '.pdf',
       );
     } catch (err) {
-      if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not generate PDF: $err')),
+        SnackBar(content: Text('Could not generate PDF: ' + err.toString())),
       );
     }
   }
@@ -3103,7 +3131,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     final profCtrl = TextEditingController(text: devotee.profession);
     final eduCtrl = TextEditingController(text: devotee.education);
     final addrCtrl = TextEditingController(text: devotee.address);
-    final badgeCtrl = TextEditingController(text: devotee.avatarBadge);
+    
     String selectedRole = devotee.role;
     String? selectedPreacher = devotee.preacherId;
 
@@ -3124,7 +3152,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                 const SizedBox(height: 10),
                 TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: badgeCtrl, decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🌅, 🔥, 👑)', border: OutlineInputBorder())),
+                TextField(decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🌅, 🔥, 👑)', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
@@ -3176,7 +3204,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                     'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
                     'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
                     'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                    'avatar_badge': badgeCtrl.text.trim(),
+                    
                     'role': selectedRole,
                     'preacher_id': selectedPreacher,
                   }).eq('id', devotee.id);
@@ -3869,6 +3897,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   children: [
                     Expanded(
                       child: SegmentedButton<String>(
+                        showSelectedIcon: false,
                         segments: const [
                           ButtonSegment(value: 'weekly', label: Text('Weekly')),
                           ButtonSegment(value: 'monthly', label: Text('Monthly')),
@@ -4132,7 +4161,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final profCtrl = TextEditingController(text: _profileData?['profession'] ?? '');
     final eduCtrl = TextEditingController(text: _profileData?['education'] ?? '');
     final addrCtrl = TextEditingController(text: _profileData?['address'] ?? '');
-    final badgeCtrl = TextEditingController(text: _profileData?['avatar_badge'] ?? '');
+    
     final emailCtrl = TextEditingController(text: supabase.auth.currentUser?.email ?? '');
     final passCtrl = TextEditingController();
     String? selectedPreacherId = _profileData?['preacher_id']?.toString();
@@ -4202,7 +4231,6 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: badgeCtrl,
                     decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🪷, 🌅, 🔥, 👑)', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
@@ -4267,7 +4295,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                       'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
                       'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
                       'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                      'avatar_badge': badgeCtrl.text.trim(),
+                      
                       'date_of_birth': selectedDob != null ? DateFormat('yyyy-MM-dd').format(selectedDob!) : null,
                       'preacher_id': selectedPreacherId,
                     }).eq('id', user.id);
