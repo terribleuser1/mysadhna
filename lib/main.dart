@@ -1167,7 +1167,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           .limit(1)
           .maybeSingle();
 
-      if (res != null && mounted) {
+      if (!kIsWeb && res != null && mounted) {
         final int targetBuild = res['min_version_code'] ?? 20;
         if (kCurrentInstalledVersionCode < targetBuild) {
           setState(() {
