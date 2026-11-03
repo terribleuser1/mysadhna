@@ -67,12 +67,12 @@ class AppColors {
   static const Color goldAccent = Color(0xFFFBBF24);
   static const Color tulsiGreen = Color(0xFF10B981);
   static const Color tulsiSoft = Color(0xFF059669);
-  static const Color creamBg = Color(0xFF0B0F19);
-  static const Color cardBg = Color(0xFF151C2C);
-  static const Color textDark = Color(0xFFF8FAFC);
-  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color creamBg = Color(0xFFFAF9F6);
+  static const Color cardBg = Colors.white;
+  static const Color textDark = Color(0xFFE2E8F0);
+  static const Color textMuted = Color(0xFF64748B);
   static const Color sacredRed = Color(0xFFEF4444);
-  static const Color borderSubtle = Color(0xFF1E293B);
+  static const Color borderSubtle = Color(0xFFE2E8F0);
 }
 class VaishnavaTilakLogo extends StatelessWidget {
   final double size;
@@ -477,7 +477,7 @@ class MySadhnaApp extends StatelessWidget {
               colorScheme: const ColorScheme.dark(
                 primary: AppColors.saffronPrimary,
                 surface: Color(0xFF1E1E1E),
-                onSurface: Color(0xFFF8FAFC),
+                onSurface: Color(0xFFE2E8F0),
               ),
               appBarTheme: AppBarTheme(
                 backgroundColor: const Color(0xFF1E1E1E),
