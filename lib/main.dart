@@ -61,17 +61,17 @@ String formatIndianNumber(num count) {
 }
 
 class AppColors {
-  static const Color saffronPrimary = Color(0xFFF59E0B);
-  static const Color saffronDark = Color(0xFFD97706);
-  static const Color goldAccent = Color(0xFFFBBF24);
-  static const Color tulsiGreen = Color(0xFF10B981);
-  static const Color tulsiSoft = Color(0xFF059669);
-  static const Color creamBg = Color(0xFF0B0F19);
-  static const Color cardBg = Color(0xFF151C2C);
-  static const Color textDark = Color(0xFFF8FAFC);
-  static const Color textMuted = Color(0xFF94A3B8);
-  static const Color sacredRed = Color(0xFFEF4444);
-  static const Color borderSubtle = Color(0xFF1E293B);
+  static const Color saffronPrimary = Color(0xFFFF9933);
+  static const Color saffronDark = Color(0xFFC04B00);
+  static const Color goldAccent = Color(0xFFD97706);
+  static const Color tulsiGreen = Color(0xFF1B4332);
+  static const Color tulsiSoft = Color(0xFF2D6A4F);
+  static const Color creamBg = Color(0xFFFAF9F6);
+  static const Color cardBg = Colors.white;
+  static const Color textDark = Color(0xFF1F1A17);
+  static const Color textMuted = Color(0xFF6B5E55);
+  static const Color sacredRed = Color(0xFF991B1B);
+  static const Color borderSubtle = Color(0xFFE2D9D0);
 }
 class VaishnavaTilakLogo extends StatelessWidget {
   final double size;
@@ -448,7 +448,7 @@ class MySadhnaApp extends StatelessWidget {
           builder: (context, mode, _) => MaterialApp(
             title: 'My Sadhna',
             debugShowCheckedModeBanner: false,
-            themeMode: mode,
+            themeMode: ThemeMode.light,
             theme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.light,
@@ -466,29 +466,6 @@ class MySadhnaApp extends StatelessWidget {
                   letterSpacing: 0.5,
                 ),
                 iconTheme: const IconThemeData(color: AppColors.textDark),
-              ),
-            ),
-            darkTheme: ThemeData(
-              useMaterial3: true,
-              brightness: Brightness.dark,
-              scaffoldBackgroundColor: const Color(0xFF121212),
-              cardColor: const Color(0xFF1E1E1E),
-              colorScheme: const ColorScheme.dark(
-                primary: AppColors.saffronPrimary,
-                surface: Color(0xFF1E1E1E),
-                onSurface: Color(0xFFF8FAFC),
-              ),
-              appBarTheme: AppBarTheme(
-                backgroundColor: const Color(0xFF1E1E1E),
-                elevation: 0,
-                centerTitle: true,
-                titleTextStyle: GoogleFonts.cinzel(
-                  color: Colors.white,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-                iconTheme: const IconThemeData(color: Colors.white),
               ),
             ),
             home: const Column(
