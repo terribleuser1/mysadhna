@@ -17,6 +17,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 
+
+final ValueNotifier<int> globalUnreadAlertsNotifier = ValueNotifier<int>(0);
+
 final ValueNotifier<int> globalUnreadAlerts = ValueNotifier<int>(0);
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -1733,7 +1736,7 @@ class SukritiBadgesCard extends StatelessWidget {
         'unlocked': totalRoundsMonth >= 108,
       },
       {
-        'title': 'Maha-Bhagavata',
+        'title': 'Nistha-Sadhaka',
         'subtitle': '400+ Rounds Logged',
         'icon': '👑',
         'unlocked': totalRoundsMonth >= 400,
@@ -2126,7 +2129,17 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
     try {
       final doc = pw.Document();
-      final totalSP = entries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
+      final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final monthEntries = entries.where((e) {
+      try {
+        final d = DateTime.parse(e.entryDate);
+        return d.isAfter(firstDayOfMonth.subtract(const Duration(days: 1))) && d.month == now.month && d.year == now.year;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+    final totalSP = monthEntries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
       final totalRounds = entries.fold<int>(0, (sum, e) => sum + e.chantingRounds);
       final totalBookMins = entries.fold<int>(0, (sum, e) => sum + e.spBookReadingMinutes);
       final totalHearingMins = entries.fold<int>(0, (sum, e) => sum + e.spLectureMinutes + e.otherHearingMinutes);
@@ -2315,7 +2328,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           ),
                         ),
 
-                        // --- ACCUMULATED SUKRITI POINTS ---
+                        // --- CURRENT MONTH SUKRITI POINTS ---
                         Container(
                           padding: const EdgeInsets.all(22),
                           decoration: BoxDecoration(
@@ -2326,7 +2339,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isHindi ? 'संचित सुकृति अंक' : 'ACCUMULATED SUKRITI POINTS',
+                                isHindi ? 'संचित सुकृति अंक' : 'CURRENT MONTH SUKRITI POINTS',
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 11,
@@ -2342,7 +2355,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                               Text(
                                 isHindi
                                     ? 'औसत: ${stats.avgSP.toStringAsFixed(1)} SP / दिन • ${stats.count} दिन दर्ज (पिछले ३० दिन)'
-                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (Past 30 Days)',
+                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (This Month)',
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                               ),
                             ],
