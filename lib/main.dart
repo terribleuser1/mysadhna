@@ -1,15 +1,12 @@
-import 'package:flutter/foundation.dart';
-
-
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -20,42 +17,32 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void launchSafeWhatsAppDigest({required BuildContext context, required String title, required String message}) {
-  final encoded = Uri.encodeComponent('*' + title + '*\n\n' + message);
-  final uri = Uri.parse('https://wa.me/?text=$encoded');
+  final encoded = Uri.encodeComponent('*' + title + '*\\\\n\\\\n' + message);
+  final uri = Uri.parse('https://wa.me/?text=' + encoded);
   launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
-
-
-
-
-
-
-
-
-
-final ValueNotifier<ThemeMode> globalThemeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
 final ValueNotifier<int> globalUnreadAlertsNotifier = ValueNotifier<int>(0);
-
+final ValueNotifier<int> globalUnreadNoticeCount = ValueNotifier<int>(0);
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 27; // Matched with build +22
-const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
+const int kCurrentInstalledVersionCode = 27;
+const String kVercelApkDownloadUrl = 'https://mysadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
 
 String formatIndianNumber(num count) {
   if (count >= 10000000) {
-    return '${(count / 10000000).toStringAsFixed(1)} Cr';
+    return (count / 10000000).toStringAsFixed(1) + ' Cr';
   } else if (count >= 100000) {
-    return '${(count / 100000).toStringAsFixed(1)} L';
+    return (count / 100000).toStringAsFixed(1) + ' L';
   } else if (count >= 1000) {
-    return '${(count / 1000).toStringAsFixed(1)} K';
+    return (count / 1000).toStringAsFixed(1) + ' K';
   }
   return count.toString();
 }
@@ -73,6 +60,7 @@ class AppColors {
   static const Color sacredRed = Color(0xFF991B1B);
   static const Color borderSubtle = Color(0xFFE2D9D0);
 }
+
 class VaishnavaTilakLogo extends StatelessWidget {
   final double size;
   final bool showText;
@@ -123,14 +111,12 @@ class _TilakPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    // 1. Outer Sacred Circle / Japa Bead Ring
     final ringPaint = Paint()
       ..color = AppColors.goldAccent.withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = w * 0.045;
     canvas.drawCircle(Offset(w / 2, h * 0.5), w * 0.44, ringPaint);
 
-    // 2. Tilak Left & Right Sacred Footprint Lines (Urdhva Pundra)
     final tilakPaint = Paint()
       ..color = AppColors.saffronPrimary
       ..style = PaintingStyle.stroke
@@ -148,13 +134,11 @@ class _TilakPainter extends CustomPainter {
     canvas.drawPath(leftPath, tilakPaint);
     canvas.drawPath(rightPath, tilakPaint);
 
-    // 3. Central Sacred Golden Drop (Radha Kripa Bindu)
     final dropPaint = Paint()
       ..color = AppColors.goldAccent
       ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset(w / 2, h * 0.32), w * 0.05, dropPaint);
 
-    // 4. Sacred Tulsi Leaf Base
     final tulsiPaint = Paint()
       ..color = AppColors.tulsiGreen
       ..style = PaintingStyle.fill;
@@ -257,7 +241,6 @@ class DevoteeProfileItem {
   final String? preacherId;
   final String preacherTitle;
   final String? latestEntryDate;
-  final String avatarBadge;
   final String? dateOfBirth;
 
   const DevoteeProfileItem({
@@ -273,7 +256,6 @@ class DevoteeProfileItem {
     required this.preacherId,
     required this.preacherTitle,
     this.latestEntryDate,
-    this.avatarBadge = '',
     this.dateOfBirth,
   });
 }
@@ -335,7 +317,6 @@ class PersonalStats {
   final String? counselorNote;
   final String? counselorTitle;
   final String? counselorId;
-  final String avatarBadge;
   final String? dateOfBirth;
 
   const PersonalStats({
@@ -351,7 +332,6 @@ class PersonalStats {
     this.counselorNote,
     this.counselorTitle,
     this.counselorId,
-    this.avatarBadge = '',
     this.dateOfBirth,
   });
 }
@@ -367,7 +347,6 @@ class RankingItem {
   double get totalSP => totalSp;
   final int totalRounds;
   final bool isCurrentUser;
-  final String avatarBadge;
 
   RankingItem({
     required this.rank,
@@ -379,7 +358,6 @@ class RankingItem {
     required this.totalSp,
     required this.totalRounds,
     required this.isCurrentUser,
-    required this.avatarBadge,
   });
 
   factory RankingItem.fromMap(Map<String, dynamic> map) {
@@ -393,7 +371,6 @@ class RankingItem {
       totalSp: double.tryParse(map['total_sp']?.toString() ?? '0') ?? 0.0,
       totalRounds: int.tryParse(map['total_rounds']?.toString() ?? '0') ?? 0,
       isCurrentUser: map['is_current_user'] == true,
-      avatarBadge: map['avatar_badge']?.toString() ?? '',
     );
   }
 }
@@ -404,7 +381,7 @@ Future<void> main() async {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
-    debugPrint('Firebase init: $e');
+    debugPrint('Firebase init: ' + e.toString());
   }
 
   await Supabase.initialize(
@@ -421,7 +398,6 @@ Future<void> main() async {
       sound: true,
     );
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // ignore: deprecated_member_use
       final token = await messaging.getToken();
       final user = supabase.auth.currentUser;
       if (token != null && user != null) {
@@ -429,7 +405,7 @@ Future<void> main() async {
       }
     }
   } catch (e) {
-    debugPrint('FCM permission error: $e');
+    debugPrint('FCM permission error: ' + e.toString());
   }
 
   runApp(const MySadhnaApp());
@@ -443,37 +419,35 @@ class MySadhnaApp extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: appLanguage,
       builder: (context, lang, _) {
-        return ValueListenableBuilder<ThemeMode>(
-          valueListenable: globalThemeMode,
-          builder: (context, mode, _) => MaterialApp(
-            title: 'My Sadhna',
-            debugShowCheckedModeBanner: false,
-            themeMode: ThemeMode.light,
-            theme: ThemeData(
-              useMaterial3: true,
-              brightness: Brightness.light,
-              scaffoldBackgroundColor: const Color(0xFFFDFBF7),
-              colorSchemeSeed: AppColors.saffronPrimary,
-              cardColor: Colors.white,
-              appBarTheme: AppBarTheme(
-                backgroundColor: AppColors.creamBg,
-                elevation: 0,
-                centerTitle: true,
-                titleTextStyle: GoogleFonts.cinzel(
-                  color: AppColors.textDark,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-                iconTheme: const IconThemeData(color: AppColors.textDark),
+        return MaterialApp(
+          title: 'My Sadhna',
+          debugShowCheckedModeBanner: false,
+          themeMode: ThemeMode.light,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.light,
+            fontFamily: GoogleFonts.inter().fontFamily,
+            scaffoldBackgroundColor: AppColors.creamBg,
+            colorSchemeSeed: AppColors.saffronPrimary,
+            cardColor: AppColors.cardBg,
+            appBarTheme: AppBarTheme(
+              backgroundColor: AppColors.cardBg,
+              elevation: 0,
+              centerTitle: true,
+              titleTextStyle: GoogleFonts.inter(
+                color: AppColors.textDark,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
               ),
+              iconTheme: const IconThemeData(color: AppColors.textDark),
             ),
-            home: const Column(
-              children: [
-                CompactUpdateStrip(),
-                Expanded(child: AuthGate()),
-              ],
-            ),
+          ),
+          home: const Column(
+            children: [
+              CompactUpdateStrip(),
+              Expanded(child: AuthGate()),
+            ],
           ),
         );
       },
@@ -489,7 +463,6 @@ class NotificationBellIcon extends StatefulWidget {
 }
 
 class _NotificationBellIconState extends State<NotificationBellIcon> {
-  int _unreadCount = 0;
   int _totalFeedCount = 0;
   RealtimeChannel? _subscription;
 
@@ -528,7 +501,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
         final prefs = await SharedPreferences.getInstance();
         final lastSeenCount = prefs.getInt('last_seen_notice_count') ?? 0;
         final unread = _totalFeedCount > lastSeenCount ? (_totalFeedCount - lastSeenCount) : 0;
-        setState(() => _unreadCount = unread);
+        globalUnreadNoticeCount.value = unread;
       }
     } catch (_) {}
   }
@@ -536,7 +509,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
   void _openInbox() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('last_seen_notice_count', _totalFeedCount);
-    setState(() => _unreadCount = 0);
+    globalUnreadNoticeCount.value = 0;
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -548,30 +521,42 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications_none_rounded, size: 26),
-          tooltip: 'Noticeboard',
-          onPressed: _openInbox,
-        ),
-        if (_unreadCount > 0)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                _unreadCount > 9 ? '9+' : '$_unreadCount',
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
+    return ValueListenableBuilder<int>(
+      valueListenable: globalUnreadNoticeCount,
+      builder: (context, count, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded, size: 24),
+              tooltip: 'Noticeboard',
+              onPressed: _openInbox,
             ),
-          ),
-      ],
+            if (count > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppColors.sacredRed,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  child: Text(
+                    count > 9 ? '9+' : count.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -622,9 +607,9 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: const [
-                    Icon(Icons.campaign, color: Color(0xFFD97706)),
+                const Row(
+                  children: [
+                    Icon(Icons.campaign, color: AppColors.saffronDark),
                     SizedBox(width: 8),
                     Text('Announcements & Notices', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
@@ -643,10 +628,10 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                 }
                 final list = snapshot.data ?? [];
                 if (list.isEmpty) {
-                  return Center(
+                  return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Icon(Icons.notifications_off_outlined, size: 48, color: Colors.grey),
                         SizedBox(height: 12),
                         Text('No announcements right now.', style: TextStyle(color: Colors.grey, fontSize: 14)),
@@ -668,8 +653,7 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                     if (dateStr.isNotEmpty) {
                       try {
                         final dt = DateTime.parse(dateStr).toLocal();
-                        displayDate =
-                            '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                        displayDate = dt.day.toString() + '/' + dt.month.toString() + '/' + dt.year.toString() + ' ' + dt.hour.toString().padLeft(2, '0') + ':' + dt.minute.toString().padLeft(2, '0');
                       } catch (_) {
                         displayDate = dateStr;
                       }
@@ -697,7 +681,7 @@ class _NotificationInboxSheetState extends State<NotificationInboxSheet> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text(body, style: const TextStyle(fontSize: 14, color: Colors.black87)),
+                          Text(body, style: const TextStyle(fontSize: 14, color: AppColors.textDark)),
                           const SizedBox(height: 8),
                           Row(
                             children: [
@@ -812,13 +796,13 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Notice broadcasted successfully! (${tokens.length} active push targets)'),
+          content: Text('Notice broadcasted successfully! (' + tokens.length.toString() + ' active push targets)'),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString()), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -827,8 +811,8 @@ class _NotificationBroadcastDialogState extends State<NotificationBroadcastDialo
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
-        children: const [
+      title: const Row(
+        children: [
           Icon(Icons.campaign, color: Color(0xFFD97706)),
           SizedBox(width: 8),
           Text('Broadcast Notice', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -1057,7 +1041,7 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
 
       widget.onCompleted();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: ' + e.toString()), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -1096,7 +1080,7 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
                 items: _preachers
                     .map((p) => DropdownMenuItem<String>(
                         value: p['id'].toString(),
-                        child: Text('${p['display_title']} (${p['code_suffix']})')))
+                        child: Text(p['display_title'].toString() + ' (' + p['code_suffix'].toString() + ')')))
                     .toList(),
                 onChanged: (val) => setState(() => _selectedPreacherId = val),
               ),
@@ -1130,7 +1114,7 @@ class _OnboardingDetailsScreenState extends State<OnboardingDetailsScreen> {
                       backgroundColor: const Color(0xFFD97706), foregroundColor: Colors.white),
                   child: _isSaving
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Continue to Dashboard',
+                      : const Text('Complete Registration & Enter',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -1150,35 +1134,18 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final _formKeyStep0 = GlobalKey<FormState>();
-  final _formKeyStep1 = GlobalKey<FormState>();
-
-  int _currentStep = 0;
-  bool _isLoginMode = false;
+  bool _isLoginMode = true;
   bool _isLoading = false;
   String? _updateNoticeMessage;
   String? _updateNoticeUrl;
-
-  bool _obscureLoginPassword = true;
-  bool _obscureRegisterPassword = true;
+  bool _obscurePassword = true;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _professionController = TextEditingController();
-  final _educationController = TextEditingController();
-  final _addressController = TextEditingController();
-
-  DateTime? _selectedDob;
-  final String _gender = 'male';
-  String? _selectedPreacherId;
-  List<PreacherItem> _preachersList = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchPreachers();
     _checkPreLoginAnnouncements();
   }
 
@@ -1205,18 +1172,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (_) {}
   }
 
-  Future<void> _fetchPreachers() async {
-    try {
-      final response =
-          await supabase.from('preachers').select('id, code_suffix, display_title, is_active').eq('is_active', true);
-      final List<dynamic> raw = response as List<dynamic>;
-      setState(() {
-        _preachersList = raw.map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
-        if (_preachersList.isNotEmpty) _selectedPreacherId = _preachersList.first.id;
-      });
-    } catch (_) {}
-  }
-
   Future<void> _handleGoogleSignIn() async {
     const webClientId = '680972598415-sjt80ptiff10qbjt0661s2dnfdtqoorp.apps.googleusercontent.com';
 
@@ -1224,19 +1179,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       setState(() => _isLoading = true);
 
       if (kIsWeb) {
-        // Use native Supabase OAuth on Web to avoid token extraction null errors
         await supabase.auth.signInWithOAuth(
           OAuthProvider.google,
-          redirectTo: 'https://my-sadhna.vercel.app',
+          redirectTo: 'https://mysadhna.vercel.app',
         );
         return;
       }
 
-      // Android native Google Sign-In flow
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: webClientId,
-      );
-
+      final GoogleSignIn googleSignIn = GoogleSignIn(serverClientId: webClientId);
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         if (mounted) setState(() => _isLoading = false);
@@ -1261,7 +1211,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.sacredRed,
-            content: Text('Google Sign-In failed: $e'),
+            content: Text('Google Sign-In failed: ' + e.toString()),
           ),
         );
       }
@@ -1271,31 +1221,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _handleAuth() async {
-    setState(() => _isLoading = true);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both email and password.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     try {
       if (_isLoginMode) {
         await supabase.auth.signInWithPassword(email: email, password: password);
       } else {
-        if (_selectedPreacherId == null) throw Exception('Please select an assigned Preacher.');
         final authRes = await supabase.auth.signUp(email: email, password: password);
         final userId = authRes.user?.id;
         if (userId != null) {
           await supabase.from('profiles').upsert({
             'id': userId,
             'role': 'counselee',
-            'preacher_id': _selectedPreacherId,
-            'full_name': _nameController.text.trim(),
             'email': email,
-            'phone_number': _phoneController.text.trim(),
-            'gender': _gender,
-            'date_of_birth': _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : null,
-            'profession': _professionController.text.trim(),
-            'education': _educationController.text.trim(),
-            'address': _addressController.text.trim(),
-            'avatar_badge': '',
+            'full_name': email.split('@').first,
             'hide_name_on_leaderboard': false,
             'is_approved': true,
           });
@@ -1304,7 +1253,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(backgroundColor: AppColors.sacredRed, content: Text(e.toString().replaceAll('Exception: ', ''))));
+          SnackBar(
+            backgroundColor: AppColors.sacredRed,
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1314,31 +1267,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 700;
+    final isDesktop = size.width > 600;
 
     return Scaffold(
+      backgroundColor: AppColors.creamBg,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
           child: Container(
-            constraints: BoxConstraints(maxWidth: isDesktop ? 480 : size.width),
+            constraints: BoxConstraints(maxWidth: isDesktop ? 440 : size.width),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.borderSubtle),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
               ],
             ),
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 8),
-                const VaishnavaTilakLogo(size: 64, showText: true),
-                const SizedBox(height: 24),
+                const SizedBox(height: 4),
+                const VaishnavaTilakLogo(size: 60, showText: true),
+                const SizedBox(height: 20),
                 Container(
-                  decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.creamBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -1347,13 +1310,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                                color: !_isLoginMode ? AppColors.saffronPrimary : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12)),
+                              color: !_isLoginMode ? AppColors.saffronDark : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             alignment: Alignment.center,
-                            child: Text('Register',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: !_isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text(
+                              'Register',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: !_isLoginMode ? Colors.white : AppColors.textMuted,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1363,249 +1331,142 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                                color: _isLoginMode ? AppColors.saffronPrimary : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12)),
+                              color: _isLoginMode ? AppColors.saffronDark : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             alignment: Alignment.center,
-                            child: Text('Sign In',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: _isLoginMode ? Colors.white : AppColors.textMuted)),
+                            child: Text(
+                              'Sign In',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: _isLoginMode ? Colors.white : AppColors.textMuted,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                if (_isLoginMode) ...[
-                  if (_updateNoticeMessage != null) ...[
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        border: Border.all(color: AppColors.saffronDark),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _updateNoticeMessage!,
-                            style: const TextStyle(
-                                color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
-                            textAlign: TextAlign.center,
+                const SizedBox(height: 20),
+                if (_updateNoticeMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      border: Border.all(color: AppColors.saffronDark),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _updateNoticeMessage!,
+                          style: const TextStyle(
+                              color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.saffronDark,
+                            foregroundColor: Colors.white,
                           ),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.saffronDark,
-                              foregroundColor: Colors.white,
-                            ),
-                            icon: const Icon(Icons.download, size: 16),
-                            label: const Text('Update App Now'),
-                            onPressed: () async {
-                              if (_updateNoticeUrl != null) {
-                                final uri = Uri.parse(_updateNoticeUrl!);
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                }
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Update App Now'),
+                          onPressed: () async {
+                            if (_updateNoticeUrl != null) {
+                              final uri = Uri.parse(_updateNoticeUrl!);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
                               }
-                            },
-                          ),
-                        ],
-                      ),
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                  ],
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                        labelText: 'Email Address',
-                        prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscureLoginPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscureLoginPassword ? Icons.visibility_off : Icons.visibility,
-                            color: AppColors.textMuted),
-                        onPressed: () => setState(() => _obscureLoginPassword = !_obscureLoginPassword),
-                      ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onFieldSubmitted: (_) => _handleAuth(),
-                  ),
-                ] else ...[
-                  if (_currentStep == 0)
-                    Form(
-                      key: _formKeyStep0,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                              controller: _nameController,
-                              decoration: InputDecoration(
-                                  labelText: 'Full / Initiated Name',
-                                  prefixIcon: const Icon(Icons.person_outline, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                              controller: _phoneController,
-                              decoration: InputDecoration(
-                                  labelText: 'Phone Number',
-                                  prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                              controller: _emailController,
-                              decoration: InputDecoration(
-                                  labelText: 'Email Address',
-                                  prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscureRegisterPassword,
-                            decoration: InputDecoration(
-                              labelText: 'Password (6+ chars)',
-                              prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
-                              suffixIcon: IconButton(
-                                  icon: Icon(_obscureRegisterPassword ? Icons.visibility_off : Icons.visibility,
-                                      color: AppColors.textMuted),
-                                  onPressed: () =>
-                                      setState(() => _obscureRegisterPassword = !_obscureRegisterPassword)),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_currentStep == 1)
-                    Form(
-                      key: _formKeyStep1,
-                      child: Column(
-                        children: [
-                          Card(
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                side: const BorderSide(color: AppColors.borderSubtle)),
-                            child: ListTile(
-                              leading: const Icon(Icons.cake_outlined, color: AppColors.saffronDark),
-                              title: Text(_selectedDob == null
-                                  ? 'Date of Birth (DOB)'
-                                  : DateFormat('dd MMMM yyyy').format(_selectedDob!)),
-                              trailing: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
-                              onTap: () async {
-                                final picked = await showDatePicker(
-                                    context: context,
-                                    initialDate: DateTime(2000, 1, 1),
-                                    firstDate: DateTime(1940),
-                                    lastDate: DateTime.now());
-                                if (picked != null) setState(() => _selectedDob = picked);
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                              controller: _professionController,
-                              decoration: InputDecoration(
-                                  labelText: 'Profession',
-                                  prefixIcon: const Icon(Icons.work_outline, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                              controller: _educationController,
-                              decoration: InputDecoration(
-                                  labelText: 'Qualification',
-                                  prefixIcon: const Icon(Icons.school, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                              controller: _addressController,
-                              decoration: InputDecoration(
-                                  labelText: 'City / Address',
-                                  prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.saffronDark),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)))),
-                        ],
-                      ),
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedPreacherId,
-                      decoration: InputDecoration(
-                          labelText: 'Assigned Preacher',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          prefixIcon: const Icon(Icons.temple_hindu_outlined, color: AppColors.saffronDark)),
-                      items: _preachersList
-                          .map((p) => DropdownMenuItem<String>(
-                              value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})')))
-                          .toList(),
-                      onChanged: (val) => setState(() => _selectedPreacherId = val),
-                    ),
                 ],
-                const SizedBox(height: 28),
-                Row(
-                  children: [
-                    if (!_isLoginMode && _currentStep > 0) ...[
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: const BorderSide(color: AppColors.saffronPrimary, width: 1.5),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          icon: const Icon(Icons.arrow_back, color: AppColors.saffronDark, size: 18),
-                          label: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
-                          onPressed: () => setState(() => _currentStep--),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.saffronPrimary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                if (_isLoginMode) {
-                                  _handleAuth();
-                                } else {
-                                  if (_currentStep < 2) {
-                                    setState(() => _currentStep++);
-                                  } else {
-                                    _handleAuth();
-                                  }
-                                }
-                              },
-                        child: _isLoading
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : Text(
-                                _isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step →' : 'Complete Registration'),
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                              ),
-                      ),
+                TextFormField(
+                  controller: _emailController,
+                  style: const TextStyle(color: AppColors.textDark),
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    labelStyle: const TextStyle(color: AppColors.textMuted),
+                    prefixIcon: const Icon(Icons.email_outlined, color: AppColors.saffronDark),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.borderSubtle),
                     ),
-                  ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  style: const TextStyle(color: AppColors.textDark),
+                  decoration: InputDecoration(
+                    labelText: 'Password (6+ chars)',
+                    labelStyle: const TextStyle(color: AppColors.textMuted),
+                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.saffronDark),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: AppColors.textMuted),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.borderSubtle),
+                    ),
+                  ),
+                  onFieldSubmitted: (_) => _handleAuth(),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.saffronDark,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isLoading ? null : _handleAuth,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            _isLoginMode ? 'Sign In' : 'Register & Continue',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 46),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    side: const BorderSide(color: AppColors.borderSubtle),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.account_circle, color: AppColors.saffronDark),
-                  label: const Text('One-Tap Google Sign-In', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
+                  label: const Text(
+                    'One-Tap Google Sign-In',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark),
+                  ),
                   onPressed: _isLoading ? null : _handleGoogleSignIn,
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Only your name and email are used for sadhana records.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -1639,13 +1500,20 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final profile = await supabase.from('profiles').select('role, preacher_id').eq('id', user.id).maybeSingle();
+        final profile = await supabase.from('profiles').select('role, preacher_id, full_name').eq('id', user.id).maybeSingle();
         if (profile != null) {
           final role = profile['role']?.toString() ?? 'counselee';
           final pId = profile['preacher_id']?.toString();
+          final name = profile['full_name']?.toString() ?? '';
           setState(() {
             _userRole = role;
-            _needsOnboarding = (role == 'counselee' && (pId == null || pId.isEmpty));
+            _needsOnboarding = (role == 'counselee' && (pId == null || pId.isEmpty || name.isEmpty));
+            _isLoading = false;
+          });
+          return;
+        } else {
+          setState(() {
+            _needsOnboarding = true;
             _isLoading = false;
           });
           return;
@@ -1741,7 +1609,7 @@ class _MainNavigationScaffoldState extends State<MainNavigationScaffold> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
-        indicatorColor: AppColors.saffronPrimary.withValues(alpha: 0.2),
+        indicatorColor: AppColors.saffronPrimary.withValues(alpha: 0.15),
         destinations: destinations,
       ),
     );
@@ -1812,7 +1680,7 @@ class SukritiBadgesCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  '$consecutiveDays Day Streak 🔥',
+                  consecutiveDays.toString() + ' Day Streak 🔥',
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.saffronDark),
                 ),
               ],
@@ -1827,7 +1695,7 @@ class SukritiBadgesCard extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 12),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isUnlocked ? AppColors.creamBg : Colors.grey.shade100,
+                      color: isUnlocked ? const Color(0xFFFEF3C7) : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isUnlocked ? AppColors.saffronPrimary : Colors.grey.shade300,
@@ -1883,6 +1751,7 @@ class DevoteeSelfDashboardScreen extends StatefulWidget {
   @override
   State<DevoteeSelfDashboardScreen> createState() => _DevoteeSelfDashboardScreenState();
 }
+
 class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen> {
   late Future<PersonalStats> _statsFuture;
 
@@ -1900,7 +1769,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.tulsiGreen,
-          content: Text('🔄 $count offline sadhana offering(s) synchronized!'),
+          content: Text('🔄 ' + count.toString() + ' offline sadhana offering(s) synchronized!'),
         ),
       );
       _refreshStats();
@@ -1929,12 +1798,11 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     try {
       final userProf = await supabase
           .from('profiles')
-          .select('full_name, preacher_id, avatar_badge, date_of_birth, preachers(display_title)')
+          .select('full_name, preacher_id, date_of_birth, preachers(display_title)')
           .eq('id', userId)
           .single();
       final pTitle = (userProf['preachers'] as Map<String, dynamic>?)?['display_title']?.toString();
       final pId = userProf['preacher_id']?.toString();
-      final badge = userProf['avatar_badge']?.toString() ?? '';
       final dob = userProf['date_of_birth']?.toString();
 
       final res = await supabase
@@ -1988,7 +1856,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
         recent: entries,
         counselorTitle: pTitle,
         counselorId: pId,
-        avatarBadge: badge,
         dateOfBirth: dob,
       );
     } catch (_) {
@@ -2034,8 +1901,10 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Monthly Sadhana Heatmap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(monthName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.saffronDark)),
+              const Text('Monthly Sadhana Heatmap',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark)),
+              Text(monthName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.saffronDark)),
             ],
           ),
           const SizedBox(height: 14),
@@ -2075,7 +1944,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                   border: Border.all(color: borderCol, width: 1.2),
                 ),
                 child: Text(
-                  '$dayNum',
+                  dayNum.toString(),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -2106,7 +1975,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
     for (final m in candidateMonths) {
       final startStr = DateFormat('yyyy-MM-01').format(m);
       final lastDay = DateTime(m.year, m.month + 1, 0).day;
-      final endStr = DateFormat('yyyy-MM-${lastDay.toString().padLeft(2, '0')}').format(m);
+      final endStr = DateFormat('yyyy-MM-' + lastDay.toString().padLeft(2, '0')).format(m);
 
       try {
         final res = await supabase
@@ -2118,7 +1987,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
             .lte('entry_date', endStr)
             .order('entry_date', ascending: true);
 
-        final entries = ((res as List<dynamic>?) ?? []).map((e) => DailyLogData.fromMap(e as Map<String, dynamic>)).toList();
+        final entries =
+            ((res as List<dynamic>?) ?? []).map((e) => DailyLogData.fromMap(e as Map<String, dynamic>)).toList();
         if (entries.isNotEmpty) {
           final monthKey = DateFormat('MMMM yyyy').format(m);
           availableMonths[monthKey] = entries;
@@ -2153,7 +2023,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                     child: ListTile(
                       leading: const Icon(Icons.calendar_month, color: AppColors.saffronDark),
                       title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${entry.value.length} days recorded'),
+                      subtitle: Text(entry.value.length.toString() + ' days recorded'),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
                         Navigator.pop(ctx);
@@ -2176,7 +2046,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
       final totalSP = entries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
       final totalRounds = entries.fold<int>(0, (sum, e) => sum + e.chantingRounds);
       final totalBookMins = entries.fold<int>(0, (sum, e) => sum + e.spBookReadingMinutes);
-      final totalHearingMins = entries.fold<int>(0, (sum, e) => sum + e.spLectureMinutes + e.otherHearingMinutes);
+      final totalHearingMins =
+          entries.fold<int>(0, (sum, e) => sum + e.spLectureMinutes + e.otherHearingMinutes);
       final totalShlokas = entries.fold<int>(0, (sum, e) => sum + e.shlokasMemorized);
 
       doc.addPage(
@@ -2194,12 +2065,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                   ),
                   pw.SizedBox(height: 6),
                   pw.Text(
-                    'Total SP: ' + totalSP.toStringAsFixed(0) +
-                    ' | Rounds: ' + totalRounds.toString() +
-                    ' | Reading: ' + totalBookMins.toString() + 'm' +
-                    ' | Hearing: ' + totalHearingMins.toString() + 'm' +
-                    ' | Shlokas: ' + totalShlokas.toString() +
-                    ' | Days: ' + entries.length.toString(),
+                    'Total SP: ' + totalSP.toStringAsFixed(0) + ' | Rounds: ' + totalRounds.toString() + ' | Reading: ' + totalBookMins.toString() + 'm | Hearing: ' + totalHearingMins.toString() + 'm | Shlokas: ' + totalShlokas.toString() + ' | Days: ' + entries.length.toString(),
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                   pw.Divider(thickness: 1),
@@ -2216,17 +2082,19 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                       'Shlokas',
                       'Score'
                     ],
-                    data: entries.map((e) => [
-                      e.entryDate,
-                      e.wakeUpTime,
-                      e.bedTime,
-                      e.chantingRounds.toString(),
-                      e.spBookReadingMinutes.toString() + 'm',
-                      e.spLectureMinutes.toString() + 'm',
-                      e.otherHearingMinutes.toString() + 'm',
-                      e.shlokasMemorized.toString(),
-                      e.calculatedScore.toStringAsFixed(1),
-                    ]).toList(),
+                    data: entries
+                        .map((e) => [
+                              e.entryDate,
+                              e.wakeUpTime,
+                              e.bedTime,
+                              e.chantingRounds.toString(),
+                              e.spBookReadingMinutes.toString() + 'm',
+                              e.spLectureMinutes.toString() + 'm',
+                              e.otherHearingMinutes.toString() + 'm',
+                              e.shlokasMemorized.toString(),
+                              e.calculatedScore.toStringAsFixed(1),
+                            ])
+                        .toList(),
                     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
                     cellStyle: const pw.TextStyle(fontSize: 8),
                   ),
@@ -2313,17 +2181,11 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       children: [
-                        // --- DAILY PRABHUPADA NECTAR CARD ---
                         Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.saffronPrimary.withValues(alpha: 0.12),
-                                AppColors.goldAccent.withValues(alpha: 0.05),
-                              ],
-                            ),
+                            color: const Color(0xFFFEF3C7).withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: AppColors.saffronPrimary.withValues(alpha: 0.3)),
                           ),
@@ -2348,7 +2210,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '— ${nectar['ref']}',
+                                      '— ' + (nectar['ref'] ?? ''),
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
@@ -2361,13 +2223,20 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             ],
                           ),
                         ),
-
-                        // --- ACCUMULATED SUKRITI POINTS ---
                         Container(
                           padding: const EdgeInsets.all(22),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [AppColors.saffronPrimary, AppColors.saffronDark]),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            ),
                             borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFD97706).withValues(alpha: 0.25),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                              )
+                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2388,16 +2257,14 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                               ),
                               Text(
                                 isHindi
-                                    ? 'औसत: ${stats.avgSP.toStringAsFixed(1)} SP / दिन • ${stats.count} दिन दर्ज (पिछले ३० दिन)'
-                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (All-Time)',
+                                    ? 'औसत: ' + stats.avgSP.toStringAsFixed(1) + ' SP / दिन • ' + stats.count.toString() + ' दिन दर्ज (पिछले ३० दिन)'
+                                    : 'Avg: ' + stats.avgSP.toStringAsFixed(1) + ' SP / day • ' + stats.count.toString() + ' Days Logged (All-Time)',
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 18),
-
-                        // --- DAILY STATUS / OFFERING CARD ---
                         Container(
                           decoration: BoxDecoration(
                             color: stats.hasLoggedToday ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED),
@@ -2410,7 +2277,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           child: Row(
                             children: [
                               CircleAvatar(
-                                backgroundColor: stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
+                                backgroundColor:
+                                    stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronPrimary,
                                 foregroundColor: Colors.white,
                                 child: Icon(stats.hasLoggedToday ? Icons.check_circle_outline : Icons.edit_calendar),
                               ),
@@ -2425,7 +2293,8 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                           : (hasToday
                                               ? (isHindi ? "आज अर्पित • कल लंबित" : "Today Offered • Yesterday Pending")
                                               : (isHindi ? "आज की साधना लंबित" : "Today's Sadhana Pending")),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textDark),
                                     ),
                                     Text(
                                       stats.hasLoggedToday
@@ -2443,6 +2312,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                   backgroundColor:
                                       stats.hasLoggedToday ? AppColors.tulsiGreen : AppColors.saffronDark,
                                   foregroundColor: Colors.white,
+                                  elevation: 0,
                                 ),
                                 onPressed: () async {
                                   final result = await Navigator.push(
@@ -2463,8 +2333,6 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           ),
                         ),
                         const SizedBox(height: 18),
-
-                        // --- STREAK & 30-DAY STATS ROW ---
                         Row(
                           children: [
                             Expanded(
@@ -2494,7 +2362,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      '${stats.currentStreak} ${isHindi ? "दिन" : "Days"}',
+                                      stats.currentStreak.toString() + ' ' + (isHindi ? "दिन" : "Days"),
                                       style: const TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.w900,
@@ -2502,7 +2370,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                       ),
                                     ),
                                     Text(
-                                      '${isHindi ? "सर्वश्रेष्ठ" : "Best"}: ${stats.longestStreak} ${isHindi ? "दिन" : "Days"}',
+                                      (isHindi ? "सर्वश्रेष्ठ" : "Best") + ': ' + stats.longestStreak.toString() + ' ' + (isHindi ? "दिन" : "Days"),
                                       style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                                     ),
                                   ],
@@ -2537,7 +2405,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      '${stats.totalRounds}',
+                                      stats.totalRounds.toString(),
                                       style: const TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.w900,
@@ -2545,7 +2413,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                                       ),
                                     ),
                                     Text(
-                                      '${formatIndianNumber(namesCount)} ${isHindi ? "पवित्र नाम" : "Holy Names"}',
+                                      formatIndianNumber(namesCount) + ' ' + (isHindi ? "पवित्र नाम" : "Holy Names"),
                                       style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                                     ),
                                   ],
@@ -2555,19 +2423,13 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           ],
                         ),
                         const SizedBox(height: 18),
-
-                        // --- SINGLE CONSOLIDATED SUKRITI BADGES CARD ---
                         SukritiBadgesCard(
                           totalRoundsMonth: stats.totalRounds,
                           consecutiveDays: stats.currentStreak,
                         ),
                         const SizedBox(height: 18),
-
-                        // --- MONTHLY HEATMAP GRID ---
                         _buildHeatmapGrid(stats.recent),
                         const SizedBox(height: 18),
-
-                        // --- MONTHLY PDF DOWNLOAD BUTTON ---
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 46),
@@ -2644,7 +2506,8 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     if (user == null) return;
     final dateStr = DateFormat('yyyy-MM-dd').format(date);
     try {
-      final res = await supabase.from('sadhana_entries').select().eq('user_id', user.id).eq('entry_date', dateStr).maybeSingle();
+      final res =
+          await supabase.from('sadhana_entries').select().eq('user_id', user.id).eq('entry_date', dateStr).maybeSingle();
       if (res != null) {
         final rec = DailyLogData.fromMap(res);
         setState(() {
@@ -2692,7 +2555,8 @@ class _DailySadhanaEntryScreenState extends State<DailySadhanaEntryScreen> {
     final shlokaSP = _shlokasMemorized * 50.0;
     return japaSP + readingSP + hearingSP + shlokaSP;
   }
-Future<void> _submitDailySadhana() async {
+
+  Future<void> _submitDailySadhana() async {
     setState(() => _isSaving = true);
     final user = supabase.auth.currentUser;
     if (user == null) {
@@ -2704,8 +2568,8 @@ Future<void> _submitDailySadhana() async {
     final payload = {
       'user_id': user.id,
       'entry_date': dateString,
-      'wake_up_time': '${_wakeUpTime.hour.toString().padLeft(2, '0')}:${_wakeUpTime.minute.toString().padLeft(2, '0')}:00',
-      'bed_time': '${_bedTime.hour.toString().padLeft(2, '0')}:${_bedTime.minute.toString().padLeft(2, '0')}:00',
+      'wake_up_time': _wakeUpTime.hour.toString().padLeft(2, '0') + ':' + _wakeUpTime.minute.toString().padLeft(2, '0') + ':00',
+      'bed_time': _bedTime.hour.toString().padLeft(2, '0') + ':' + _bedTime.minute.toString().padLeft(2, '0') + ':00',
       'chanting_rounds': _rounds,
       'sp_book_reading_minutes': _spReadingMinutes,
       'sp_lecture_hearing_minutes': _spLectureMinutes,
@@ -2729,7 +2593,6 @@ Future<void> _submitDailySadhana() async {
         Navigator.pop(context, true);
       }
     } catch (_) {
-      // Offline fallback: store locally in device preferences
       await OfflineSadhanaSyncManager.saveLocalOffering(payload);
       if (mounted) {
         HapticFeedback.selectionClick();
@@ -2767,7 +2630,8 @@ Future<void> _submitDailySadhana() async {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text('$value $unit', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                Text(value.toString() + ' ' + unit,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
               ],
             ),
             Slider(
@@ -2797,7 +2661,6 @@ Future<void> _submitDailySadhana() async {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              // Daily Prabhupada Nectar Card
               ValueListenableBuilder<String>(
                 valueListenable: appLanguage,
                 builder: (context, lang, _) {
@@ -2807,12 +2670,7 @@ Future<void> _submitDailySadhana() async {
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.saffronPrimary.withValues(alpha: 0.12),
-                          AppColors.goldAccent.withValues(alpha: 0.05),
-                        ],
-                      ),
+                      color: const Color(0xFFFEF3C7).withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.saffronPrimary.withValues(alpha: 0.3)),
                     ),
@@ -2837,7 +2695,7 @@ Future<void> _submitDailySadhana() async {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '— ${nectar['ref']}',
+                                '— ' + (nectar['ref'] ?? ''),
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -2854,13 +2712,19 @@ Future<void> _submitDailySadhana() async {
               ),
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: AppColors.creamBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderSubtle)),
                 child: Row(
                   children: [
                     Expanded(
                       child: ChoiceChip(
-                        label: Text('Today (${DateFormat('dd MMM').format(now)})'),
+                        label: Text('Today (' + DateFormat('dd MMM').format(now) + ')'),
                         selected: !isYesterday,
+                        selectedColor: AppColors.saffronPrimary,
+                        labelStyle: TextStyle(
+                            color: !isYesterday ? Colors.white : AppColors.textDark, fontWeight: FontWeight.bold),
                         onSelected: (val) {
                           setState(() => _selectedDate = now);
                           _loadExistingOfferingForDate(now);
@@ -2870,8 +2734,11 @@ Future<void> _submitDailySadhana() async {
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
-                        label: Text('Yesterday (${DateFormat('dd MMM').format(yest)})'),
+                        label: Text('Yesterday (' + DateFormat('dd MMM').format(yest) + ')'),
                         selected: isYesterday,
+                        selectedColor: AppColors.saffronPrimary,
+                        labelStyle: TextStyle(
+                            color: isYesterday ? Colors.white : AppColors.textDark, fontWeight: FontWeight.bold),
                         onSelected: (val) {
                           setState(() => _selectedDate = yest);
                           _loadExistingOfferingForDate(yest);
@@ -2884,7 +2751,8 @@ Future<void> _submitDailySadhana() async {
               const SizedBox(height: 16),
               Card(
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
@@ -2898,14 +2766,16 @@ Future<void> _submitDailySadhana() async {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('🌅 Wake-up Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
+                              const Text('🌅 Wake-up Time',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
                               const SizedBox(height: 4),
-                              Text(_wakeUpTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                              Text(_wakeUpTime.format(context),
+                                  style: const TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                             ],
                           ),
                         ),
                       ),
-
                       Container(height: 40, width: 1, color: AppColors.borderSubtle, margin: const EdgeInsets.symmetric(horizontal: 12)),
                       Expanded(
                         child: InkWell(
@@ -2916,9 +2786,12 @@ Future<void> _submitDailySadhana() async {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('🌙 Bedtime', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
+                              const Text('🌙 Bedtime',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted)),
                               const SizedBox(height: 4),
-                              Text(_bedTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
+                              Text(_bedTime.format(context),
+                                  style: const TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.tulsiGreen)),
                             ],
                           ),
                         ),
@@ -2944,7 +2817,7 @@ Future<void> _submitDailySadhana() async {
                         children: [
                           const Text('Japa Meditation Rounds',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text('$_rounds rounds',
+                          Text(_rounds.toString() + ' rounds',
                               style: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
                         ],
@@ -2955,7 +2828,7 @@ Future<void> _submitDailySadhana() async {
                         children: [16, 20, 25, 32, 64].map((preset) {
                           final isSelected = _rounds == preset;
                           return ChoiceChip(
-                            label: Text('$preset'),
+                            label: Text(preset.toString()),
                             selected: isSelected,
                             selectedColor: AppColors.saffronPrimary,
                             labelStyle: TextStyle(
@@ -2979,17 +2852,49 @@ Future<void> _submitDailySadhana() async {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildSliderStepperCard(title: 'SP Book Reading', value: _spReadingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spReadingMinutes = v)),
-              _buildSliderStepperCard(title: 'SP Lecture Hearing', value: _spLectureMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _spLectureMinutes = v)),
-              _buildSliderStepperCard(title: 'Other Spiritual Hearing', value: _otherHearingMinutes, min: 0, max: 180, step: 5, unit: 'mins', onChanged: (v) => setState(() => _otherHearingMinutes = v)),
-              _buildSliderStepperCard(title: 'Shlokas Memorized Today', value: _shlokasMemorized, min: 0, max: 20, step: 1, unit: 'verses', onChanged: (v) => setState(() => _shlokasMemorized = v)),
+              _buildSliderStepperCard(
+                  title: 'SP Book Reading',
+                  value: _spReadingMinutes,
+                  min: 0,
+                  max: 180,
+                  step: 5,
+                  unit: 'mins',
+                  onChanged: (v) => setState(() => _spReadingMinutes = v)),
+              _buildSliderStepperCard(
+                  title: 'SP Lecture Hearing',
+                  value: _spLectureMinutes,
+                  min: 0,
+                  max: 180,
+                  step: 5,
+                  unit: 'mins',
+                  onChanged: (v) => setState(() => _spLectureMinutes = v)),
+              _buildSliderStepperCard(
+                  title: 'Other Spiritual Hearing',
+                  value: _otherHearingMinutes,
+                  min: 0,
+                  max: 180,
+                  step: 5,
+                  unit: 'mins',
+                  onChanged: (v) => setState(() => _otherHearingMinutes = v)),
+              _buildSliderStepperCard(
+                  title: 'Shlokas Memorized Today',
+                  value: _shlokasMemorized,
+                  min: 0,
+                  max: 20,
+                  step: 1,
+                  unit: 'verses',
+                  onChanged: (v) => setState(() => _shlokasMemorized = v)),
               const SizedBox(height: 20),
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, elevation: 0),
                   onPressed: _isSaving ? null : _submitDailySadhana,
-                  child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(widget.existingRecord != null ? 'Update Offering' : 'Submit Offering', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(widget.existingRecord != null ? 'Update Offering' : 'Submit Offering',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -3009,7 +2914,6 @@ class SuperAdminConsoleScreen extends StatefulWidget {
 }
 
 class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with SingleTickerProviderStateMixin {
-
   void _showAdminSadhanaManagementModal(DevoteeProfileItem devotee) {
     showModalBottomSheet(
       context: context,
@@ -3021,9 +2925,11 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Manage Sadhana: ${devotee.fullName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('Manage Sadhana: ' + devotee.fullName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 6),
-              const Text('Reset entries, streaks, and scores for this devotee.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Text('Reset entries, streaks, and scores for this devotee.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
               const Divider(height: 24),
               ListTile(
                 leading: const Icon(Icons.today, color: AppColors.saffronDark),
@@ -3061,7 +2967,8 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
               ),
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: AppColors.sacredRed),
-                title: const Text('Wipe All-Time Sadhana (Full Reset)', style: TextStyle(color: AppColors.sacredRed, fontWeight: FontWeight.bold)),
+                title: const Text('Wipe All-Time Sadhana (Full Reset)',
+                    style: TextStyle(color: AppColors.sacredRed, fontWeight: FontWeight.bold)),
                 subtitle: const Text('Resets points to 0 and recalculates streaks'),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -3069,11 +2976,12 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                     context: context,
                     builder: (dCtx) => AlertDialog(
                       title: const Text('Confirm Full Reset'),
-                      content: Text('Are you sure you want to permanently delete all sadhana records for ${devotee.fullName}?'),
+                      content: Text('Are you sure you want to permanently delete all sadhana records for ' + devotee.fullName + '?'),
                       actions: [
                         TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.sacredRed, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.sacredRed, foregroundColor: Colors.white),
                           onPressed: () => Navigator.pop(dCtx, true),
                           child: const Text('Delete All Records'),
                         ),
@@ -3092,15 +3000,14 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     );
   }
 
-
   Future<void> _adminDeleteSadhanaSingleDate(String userId, String date) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await supabase.from('sadhana_entries').delete().match({'user_id': userId, 'entry_date': date});
-      messenger.showSnackBar(SnackBar(content: Text('Deleted sadhana entry for $date')));
+      messenger.showSnackBar(SnackBar(content: Text('Deleted sadhana entry for ' + date)));
       _refresh();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: ' + e.toString())));
     }
   }
 
@@ -3109,15 +3016,16 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     try {
       final sStr = DateFormat('yyyy-MM-dd').format(start);
       final eStr = DateFormat('yyyy-MM-dd').format(end);
-      await supabase.from('sadhana_entries')
+      await supabase
+          .from('sadhana_entries')
           .delete()
           .eq('user_id', userId)
           .gte('entry_date', sStr)
           .lte('entry_date', eStr);
-      messenger.showSnackBar(SnackBar(content: Text('Deleted entries from $sStr to $eStr')));
+      messenger.showSnackBar(SnackBar(content: Text('Deleted entries from ' + sStr + ' to ' + eStr)));
       _refresh();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: ' + e.toString())));
     }
   }
 
@@ -3128,7 +3036,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
       messenger.showSnackBar(const SnackBar(content: Text('All sadhana records wiped for user.')));
       _refresh();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: ' + e.toString())));
     }
   }
 
@@ -3158,12 +3066,16 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
       final devoteesCount = await supabase.from('profiles').count(CountOption.exact);
       final preachersCount = await supabase.from('preachers').count(CountOption.exact);
 
-      final pRes = await supabase.from('preachers').select('id, code_suffix, display_title, is_active').order('created_at', ascending: false);
+      final pRes = await supabase
+          .from('preachers')
+          .select('id, code_suffix, display_title, is_active')
+          .order('created_at', ascending: false);
       final pList = (pRes as List<dynamic>).map((e) => PreacherItem.fromMap(e as Map<String, dynamic>)).toList();
 
       final dRes = await supabase
           .from('profiles')
-          .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, avatar_badge, date_of_birth, preachers(display_title)')
+          .select(
+              'id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, date_of_birth, preachers(display_title)')
           .order('created_at', ascending: false);
 
       final dList = (dRes as List<dynamic>).map((e) {
@@ -3181,7 +3093,6 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
           role: map['role']?.toString() ?? 'counselee',
           preacherId: map['preacher_id']?.toString(),
           preacherTitle: pr?['display_title']?.toString() ?? 'None',
-          avatarBadge: map['avatar_badge']?.toString() ?? '',
           dateOfBirth: map['date_of_birth']?.toString(),
         );
       }).toList();
@@ -3210,24 +3121,38 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name *', border: OutlineInputBorder())),
+                TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full / Initiated Name *', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Google Login Email *', border: OutlineInputBorder())),
+                TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Google Login Email *', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: selectedPreacherId,
                   decoration: const InputDecoration(labelText: 'Assign Preacher Circle', border: OutlineInputBorder()),
-                  items: preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))).toList(),
+                  items: preachers
+                      .map((p) => DropdownMenuItem(value: p.id, child: Text(p.displayTitle + ' (' + p.codeSuffix + ')')))
+                      .toList(),
                   onChanged: (val) => setDlgState(() => selectedPreacherId = val),
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
+                TextField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'WhatsApp Phone', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+                TextField(
+                    controller: profCtrl,
+                    decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
+                TextField(
+                    controller: eduCtrl,
+                    decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
+                TextField(
+                    controller: addrCtrl,
+                    decoration: const InputDecoration(labelText: 'City / Address', border: OutlineInputBorder())),
               ],
             ),
           ),
@@ -3255,7 +3180,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   if (ctx.mounted) Navigator.pop(ctx);
                   _refresh();
                 } catch (e) {
-                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
                 }
               },
               child: const Text('Create Counselee'),
@@ -3276,9 +3201,14 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Display Name (e.g. Dayalu Gaura Das)', border: OutlineInputBorder())),
+            TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'Display Name (e.g. Dayalu Gaura Das)', border: OutlineInputBorder())),
             const SizedBox(height: 12),
-            TextField(controller: suffixCtrl, decoration: const InputDecoration(labelText: 'Code Suffix (e.g. DGD)', border: OutlineInputBorder())),
+            TextField(
+                controller: suffixCtrl,
+                decoration: const InputDecoration(labelText: 'Code Suffix (e.g. DGD)', border: OutlineInputBorder())),
           ],
         ),
         actions: [
@@ -3290,9 +3220,13 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
               final suffix = suffixCtrl.text.trim();
               if (title.isNotEmpty && suffix.isNotEmpty) {
                 if (existing != null) {
-                  await supabase.from('preachers').update({'display_title': title, 'code_suffix': suffix}).eq('id', existing.id);
+                  await supabase
+                      .from('preachers')
+                      .update({'display_title': title, 'code_suffix': suffix}).eq('id', existing.id);
                 } else {
-                  await supabase.from('preachers').insert({'display_title': title, 'code_suffix': suffix, 'is_active': true});
+                  await supabase
+                      .from('preachers')
+                      .insert({'display_title': title, 'code_suffix': suffix, 'is_active': true});
                 }
                 if (ctx.mounted) Navigator.pop(ctx);
                 _refresh();
@@ -3313,7 +3247,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
     final profCtrl = TextEditingController(text: devotee.profession);
     final eduCtrl = TextEditingController(text: devotee.education);
     final addrCtrl = TextEditingController(text: devotee.address);
-    
+
     String selectedRole = devotee.role;
     String? selectedPreacher = devotee.preacherId;
 
@@ -3321,20 +3255,31 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          title: Text('Edit Devotee: ${devotee.fullName}'),
+          title: Text('Edit Devotee: ' + devotee.fullName),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
+                TextField(
+                    controller: nameCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Full / Initiated Name', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder())),
+                TextField(
+                    controller: emailCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Login Email Address', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Reset Password (empty = unchanged)', border: OutlineInputBorder())),
+                TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Reset Password (empty = unchanged)', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
+                TextField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   decoration: const InputDecoration(labelText: 'Assigned Role', border: OutlineInputBorder()),
@@ -3353,16 +3298,22 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   decoration: const InputDecoration(labelText: 'Counselor Circle', border: OutlineInputBorder()),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None / General')),
-                    ...preachers.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.displayTitle} (${p.codeSuffix})'))),
+                    ...preachers.map((p) => DropdownMenuItem(value: p.id, child: Text(p.displayTitle + ' (' + p.codeSuffix + ')'))),
                   ],
                   onChanged: (val) => setDlgState(() => selectedPreacher = val),
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
+                TextField(
+                    controller: profCtrl,
+                    decoration: const InputDecoration(labelText: 'Profession', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: eduCtrl, decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
+                TextField(
+                    controller: eduCtrl,
+                    decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder())),
+                TextField(
+                    controller: addrCtrl,
+                    decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder())),
               ],
             ),
           ),
@@ -3372,7 +3323,8 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white),
               onPressed: () async {
                 try {
-                  if ((emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != devotee.email) || passCtrl.text.trim().isNotEmpty) {
+                  if ((emailCtrl.text.trim().isNotEmpty && emailCtrl.text.trim() != devotee.email) ||
+                      passCtrl.text.trim().isNotEmpty) {
                     await supabase.rpc('admin_update_user_credentials', params: {
                       'p_target_user_id': devotee.id,
                       'p_new_email': emailCtrl.text.trim().isNotEmpty ? emailCtrl.text.trim() : null,
@@ -3385,18 +3337,18 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                     'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
                     'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
                     'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                    
                     'role': selectedRole,
                     'preacher_id': selectedPreacher,
                   }).eq('id', devotee.id);
 
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Devotee details updated successfully.')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('Devotee details updated successfully.')));
                     _refresh();
                   }
                 } catch (e) {
-                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
                 }
               },
               child: const Text('Save Details'),
@@ -3435,7 +3387,9 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
           final filteredDevotees = stats.devoteesList.where((d) {
             if (_searchFilter.isEmpty) return true;
             final query = _searchFilter.toLowerCase();
-            return d.fullName.toLowerCase().contains(query) || d.email.toLowerCase().contains(query) || d.phoneNumber.contains(query);
+            return d.fullName.toLowerCase().contains(query) ||
+                d.email.toLowerCase().contains(query) ||
+                d.phoneNumber.contains(query);
           }).toList();
 
           return TabBarView(
@@ -3449,13 +3403,20 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.borderSubtle)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Total Devotees', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              const Text('Total Devotees',
+                                  style: TextStyle(
+                                      fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
                               const SizedBox(height: 4),
-                              Text('${stats.devotees}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
+                              Text(stats.devotees.toString(),
+                                  style: const TextStyle(
+                                      fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.saffronDark)),
                             ],
                           ),
                         ),
@@ -3463,7 +3424,10 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.saffronDark,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16)),
                           icon: const Icon(Icons.person_add, size: 18),
                           label: const Text('Add Counselee', style: TextStyle(fontWeight: FontWeight.bold)),
                           onPressed: () => _showCreateCounseleeDialog(stats.preachersList),
@@ -3473,71 +3437,72 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                   ),
                   const SizedBox(height: 16),
                   TextField(
-                    decoration: InputDecoration(hintText: 'Search devotees by name, email, phone...', prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+                    decoration: InputDecoration(
+                        hintText: 'Search devotees by name, email, phone...',
+                        prefixIcon: const Icon(Icons.search, color: AppColors.saffronDark),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
                     onChanged: (val) => setState(() => _searchFilter = val.trim()),
                   ),
                   const SizedBox(height: 14),
                   ...filteredDevotees.map((d) => Card(
-                    child: ListTile(
-                      title: Row(
-                        children: [
-                          Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          if (d.avatarBadge.trim().isNotEmpty && d.avatarBadge != '📿') ...[
-                            const SizedBox(width: 6),
-                            Text(d.avatarBadge, style: const TextStyle(fontSize: 16)),
-                          ],
-                        ],
-                      ),
-                      subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Circle: ${d.preacherTitle}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 26),
-                            tooltip: 'Edit Devotee Details',
-                            onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
+                        child: ListTile(
+                          title: Text(d.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Email: ' + d.email + '\\\\nRole: ' + d.role + ' • Circle: ' + d.preacherTitle),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 26),
+                                tooltip: 'Edit Devotee Details',
+                                onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.auto_delete_outlined, color: AppColors.sacredRed, size: 22),
+                                tooltip: 'Manage / Reset Sadhana',
+                                onPressed: () => _showAdminSadhanaManagementModal(d),
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.auto_delete_outlined, color: AppColors.sacredRed, size: 22),
-                            tooltip: 'Manage / Reset Sadhana',
-                            onPressed: () => _showAdminSadhanaManagementModal(d),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )),
+                        ),
+                      )),
                 ],
               ),
               ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.tulsiGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12)),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Preacher / Counselor Circle'),
                     onPressed: () => _showAddOrEditPreacherDialog(),
                   ),
                   const SizedBox(height: 16),
                   ...stats.preachersList.map((p) => Card(
-                    child: ListTile(
-                      leading: CircleAvatar(backgroundColor: p.isActive ? AppColors.tulsiGreen : Colors.grey, foregroundColor: Colors.white, child: Text(p.codeSuffix)),
-                      title: Text(p.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Status: ${p.isActive ? "Active" : "Inactive"}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _showAddOrEditPreacherDialog(p)),
-                          Switch(
-                            value: p.isActive,
-                            onChanged: (val) async {
-                              await supabase.from('preachers').update({'is_active': val}).eq('id', p.id);
-                              _refresh();
-                            },
+                        child: ListTile(
+                          leading: CircleAvatar(
+                              backgroundColor: p.isActive ? AppColors.tulsiGreen : Colors.grey,
+                              foregroundColor: Colors.white,
+                              child: Text(p.codeSuffix)),
+                          title: Text(p.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Status: ' + (p.isActive ? "Active" : "Inactive")),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _showAddOrEditPreacherDialog(p)),
+                              Switch(
+                                value: p.isActive,
+                                onChanged: (val) async {
+                                  await supabase.from('preachers').update({'is_active': val}).eq('id', p.id);
+                                  _refresh();
+                                },
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  )),
+                        ),
+                      )),
                 ],
               ),
             ],
@@ -3563,35 +3528,35 @@ class PreacherWhatsAppHelper {
       final hasOffered = devotee['has_logged_today'] == true;
       if (hasOffered) {
         final rounds = devotee['today_rounds'] ?? 0;
-        submitted.add('• $name ($rounds rounds)');
+        submitted.add('• ' + name.toString() + ' (' + rounds.toString() + ' rounds)');
       } else {
-        pending.add('• $name');
+        pending.add('• ' + name.toString());
       }
     }
 
     final StringBuffer buffer = StringBuffer();
     buffer.writeln('🙏 *Hare Krishna Preacher Circle Update*');
-    buffer.writeln('📅 *Date:* $todayDateStr');
-    buffer.writeln('👤 *Counselor:* $preacherName');
+    buffer.writeln('📅 *Date:* ' + todayDateStr);
+    buffer.writeln('👤 *Counselor:* ' + preacherName);
     buffer.writeln('');
-    buffer.writeln('✅ *Sadhana Offered Today (${submitted.length}):*');
+    buffer.writeln('✅ *Sadhana Offered Today (' + submitted.length.toString() + '):*');
     if (submitted.isEmpty) {
       buffer.writeln('_(None recorded yet)_');
     } else {
-      buffer.writeln(submitted.join('\n'));
+      buffer.writeln(submitted.join('\\\\n'));
     }
     buffer.writeln('');
-    buffer.writeln('⏳ *Pending Offering (${pending.length}):*');
+    buffer.writeln('⏳ *Pending Offering (' + pending.length.toString() + '):*');
     if (pending.isEmpty) {
       buffer.writeln('🎉 _All devotees have completed their offering!_');
     } else {
-      buffer.writeln(pending.join('\n'));
+      buffer.writeln(pending.join('\\\\n'));
     }
     buffer.writeln('');
-    buffer.writeln('📲 _Log your sadhana on My Sadhna: https://my-sadhna.vercel.app_');
+    buffer.writeln('📲 _Log your sadhana on My Sadhna: https://mysadhna.vercel.app_');
 
     final encoded = Uri.encodeComponent(buffer.toString());
-    final whatsappUrl = Uri.parse('https://wa.me/?text=$encoded');
+    final whatsappUrl = Uri.parse('https://wa.me/?text=' + encoded);
 
     try {
       if (await canLaunchUrl(whatsappUrl)) {
@@ -3605,7 +3570,7 @@ class PreacherWhatsAppHelper {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error launching WhatsApp: $e')),
+        SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error launching WhatsApp: ' + e.toString())),
       );
     }
   }
@@ -3615,7 +3580,6 @@ class OfflineSadhanaSyncManager {
   static const String _kOfflineKey = 'cached_offline_sadhana_entries';
   static const String _kParikramaFreezeKey = 'parikrama_freeze_active';
 
-  /// Saves an offering locally when network is unavailable
   static Future<void> saveLocalOffering(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
     final List<String> existing = prefs.getStringList(_kOfflineKey) ?? [];
@@ -3623,7 +3587,6 @@ class OfflineSadhanaSyncManager {
     await prefs.setStringList(_kOfflineKey, existing);
   }
 
-  /// Syncs cached offline entries to Supabase once back online
   static Future<int> syncCachedOfferings() async {
     final prefs = await SharedPreferences.getInstance();
     final List<String> cached = prefs.getStringList(_kOfflineKey) ?? [];
@@ -3646,13 +3609,11 @@ class OfflineSadhanaSyncManager {
     return syncedCount;
   }
 
-  /// Checks if Parikrama / Dham Yatra freeze is currently active
   static Future<bool> isParikramaFreezeActive() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_kParikramaFreezeKey) ?? false;
   }
 
-  /// Sets the Parikrama / Dham Yatra freeze status
   static Future<void> setParikramaFreeze(bool active) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kParikramaFreezeKey, active);
@@ -3666,6 +3627,7 @@ class PreacherConsoleScreen extends StatefulWidget {
   @override
   State<PreacherConsoleScreen> createState() => _PreacherConsoleScreenState();
 }
+
 class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
   void _showPreacherAddCounseleeDialog() {
     final nameCtrl = TextEditingController();
@@ -3735,7 +3697,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 if (mounted) _fetchCounselees();
               } catch (e) {
                 if (mounted) {
-                  messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                  messenger.showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
                 }
               }
             },
@@ -3749,7 +3711,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
   List<DevoteeProfileItem> _counselees = [];
   bool _isLoading = true;
   String _search = '';
-  String _filter = 'all'; // 'all', 'needs_attention', 'offered_today'
+  String _filter = 'all';
 
   @override
   void initState() {
@@ -3764,7 +3726,8 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     try {
       final res = await supabase
           .from('profiles')
-          .select('id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, avatar_badge, date_of_birth, sadhana_entries(entry_date)')
+          .select(
+              'id, full_name, email, phone_number, profession, education, address, hide_name_on_leaderboard, role, preacher_id, date_of_birth, sadhana_entries(entry_date)')
           .eq('preacher_id', user.id)
           .order('full_name', ascending: true);
 
@@ -3790,7 +3753,6 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
           preacherId: m['preacher_id']?.toString(),
           preacherTitle: 'My Group',
           latestEntryDate: lastDate,
-          avatarBadge: m['avatar_badge']?.toString() ?? '',
           dateOfBirth: m['date_of_birth']?.toString(),
         );
       }).toList();
@@ -3822,14 +3784,13 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
   }
 
   void _shareWhatsAppDigest() {
-    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final displayDate = DateFormat('dd MMM yyyy').format(DateTime.now());
 
     final rawList = _counselees.map((c) => {
-      'full_name': c.fullName,
-      'has_logged_today': c.latestEntryDate == todayStr,
-      'today_rounds': null,
-    }).toList();
+          'full_name': c.fullName,
+          'has_logged_today': _isOfferedToday(c),
+          'today_rounds': null,
+        }).toList();
 
     PreacherWhatsAppHelper.shareCircleDigest(
       context: context,
@@ -3875,7 +3836,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('My Counselees (${_counselees.length})',
+                    Text('My Counselees (' + _counselees.length.toString() + ')',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -3896,13 +3857,12 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                   onChanged: (val) => setState(() => _search = val.trim()),
                 ),
                 const SizedBox(height: 12),
-                // Preacher Quick-Filter Chips
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
                       ChoiceChip(
-                        label: Text('All (${_counselees.length})'),
+                        label: Text('All (' + _counselees.length.toString() + ')'),
                         selected: _filter == 'all',
                         selectedColor: AppColors.saffronPrimary,
                         labelStyle: TextStyle(
@@ -3926,7 +3886,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  '$attentionCount',
+                                  attentionCount.toString(),
                                   style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -3994,14 +3954,9 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
                             style: const TextStyle(fontSize: 16),
                           ),
                         ),
-                        title: Text(
-                          (c.avatarBadge.trim().isNotEmpty && c.avatarBadge != '📿')
-                              ? '${c.fullName} ${c.avatarBadge}'
-                              : c.fullName,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        title: Text(c.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          'Phone: ${c.phoneNumber.isNotEmpty ? c.phoneNumber : "None"}\nLatest Offering: ${c.latestEntryDate ?? "None recorded"}',
+                          'Phone: ' + (c.phoneNumber.isNotEmpty ? c.phoneNumber : "None") + '\\\\nLatest Offering: ' + (c.latestEntryDate ?? "None recorded"),
                           style: TextStyle(
                             color: needsAttention ? AppColors.sacredRed : AppColors.textMuted,
                             fontWeight: needsAttention ? FontWeight.w600 : FontWeight.normal,
@@ -4015,6 +3970,7 @@ class _PreacherConsoleScreenState extends State<PreacherConsoleScreen> {
     );
   }
 }
+
 class LeaderboardScreen extends StatefulWidget {
   final String userRole;
   const LeaderboardScreen({super.key, required this.userRole});
@@ -4150,24 +4106,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             tileColor: item.isCurrentUser ? AppColors.saffronPrimary.withValues(alpha: 0.12) : null,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             leading: CircleAvatar(
-                              backgroundColor: item.rank == 1 ? AppColors.goldAccent : (item.rank == 2 ? const Color(0xFFC0C0C0) : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
+                              backgroundColor: item.rank == 1
+                                  ? AppColors.goldAccent
+                                  : (item.rank == 2
+                                      ? const Color(0xFFC0C0C0)
+                                      : (item.rank == 3 ? const Color(0xFFCD7F32) : Colors.grey.shade200)),
                               foregroundColor: item.rank <= 3 ? Colors.white : Colors.black87,
-                              child: Text('#${item.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              child: Text('#' + item.rank.toString(),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
-                            title: Row(
-                              children: [
-                                Text(
-                                  item.isCurrentUser ? '${item.devoteeName} (You)' : item.devoteeName,
-                                  style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold),
-                                ),
-                                if (item.avatarBadge.trim().isNotEmpty && item.avatarBadge != '📿') ...[
-                                  const SizedBox(width: 6),
-                                  Text(item.avatarBadge, style: const TextStyle(fontSize: 16)),
-                                ],
-                              ],
+                            title: Text(
+                              item.isCurrentUser ? item.devoteeName + ' (You)' : item.devoteeName,
+                              style: TextStyle(fontWeight: item.isCurrentUser ? FontWeight.w900 : FontWeight.bold),
                             ),
-                            subtitle: Text('Circle: ${item.preacherSuffix} • ${item.totalRounds} Rounds'),
-                            trailing: Text('${item.totalSP.toStringAsFixed(1)} SP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
+                            subtitle: Text('Circle: ' + item.preacherSuffix + ' • ' + item.totalRounds.toString() + ' Rounds'),
+                            trailing: Text(item.totalSP.toStringAsFixed(1) + ' SP',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900, color: AppColors.saffronDark, fontSize: 15)),
                           );
                         },
                       ),
@@ -4177,11 +4132,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: AppColors.borderSubtle))),
+                decoration: const BoxDecoration(
+                    color: Colors.white, border: Border(top: BorderSide(color: AppColors.borderSubtle))),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Hide My Full Name on Leaderboard', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const Text('Hide My Full Name on Leaderboard',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     Switch(
                       value: _hideMyName,
                       onChanged: (val) async {
@@ -4222,14 +4179,20 @@ class WebApkDownloadBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.borderSubtle)),
       child: Row(
         children: [
           const Icon(Icons.android, color: AppColors.tulsiGreen, size: 28),
           const SizedBox(width: 14),
-          const Expanded(child: Text('Get the Android App for offline tracking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+          const Expanded(
+              child: Text('Get the Android App for offline tracking',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, elevation: 0),
             onPressed: () => _triggerDownload(context),
             child: const Text('Download APK'),
           ),
@@ -4261,7 +4224,12 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final user = supabase.auth.currentUser;
     if (user != null) {
       try {
-        final res = await supabase.from('profiles').select('full_name, email, phone_number, profession, education, address, avatar_badge, date_of_birth, role, preacher_id, preachers(display_title, code_suffix)').eq('id', user.id).single();
+        final res = await supabase
+            .from('profiles')
+            .select(
+                'full_name, email, phone_number, profession, education, address, date_of_birth, role, preacher_id, preachers(display_title, code_suffix)')
+            .eq('id', user.id)
+            .single();
         if (mounted) setState(() { _profileData = res; _isLoading = false; });
         return;
       } catch (_) {}
@@ -4303,7 +4271,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 }
                 messenger.showSnackBar(const SnackBar(content: Text('Credentials updated successfully.')));
               } catch (e) {
-                messenger.showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')));
+                messenger.showSnackBar(SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: ' + e.toString())));
               }
             },
             child: const Text('Update'),
@@ -4341,7 +4309,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+        SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: ' + e.toString())),
       );
     }
   }
@@ -4352,7 +4320,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
     final profCtrl = TextEditingController(text: _profileData?['profession'] ?? '');
     final eduCtrl = TextEditingController(text: _profileData?['education'] ?? '');
     final addrCtrl = TextEditingController(text: _profileData?['address'] ?? '');
-    
+
     final emailCtrl = TextEditingController(text: supabase.auth.currentUser?.email ?? '');
     final passCtrl = TextEditingController();
     String? selectedPreacherId = _profileData?['preacher_id']?.toString();
@@ -4394,7 +4362,8 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                   TextField(
                     controller: passCtrl,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'New Password (leave empty to keep current)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'New Password (leave empty to keep current)', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   Card(
@@ -4421,13 +4390,13 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   DropdownButtonFormField<String>(
                     initialValue: selectedPreacherId,
-                    decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
                     items: preachersList.map<DropdownMenuItem<String>>((p) => DropdownMenuItem<String>(
                       value: p['id'].toString(),
-                      child: Text('${p['display_title']} (${p['code_suffix']})'),
+                      child: Text(p['display_title'].toString() + ' (' + p['code_suffix'].toString() + ')'),
                     )).toList(),
                     onChanged: (val) => setDlgState(() => selectedPreacherId = val),
                   ),
@@ -4483,7 +4452,6 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                       'profession': profCtrl.text.trim().isEmpty ? null : profCtrl.text.trim(),
                       'education': eduCtrl.text.trim().isEmpty ? null : eduCtrl.text.trim(),
                       'address': addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
-                      
                       'date_of_birth': selectedDob != null ? DateFormat('yyyy-MM-dd').format(selectedDob!) : null,
                       'preacher_id': selectedPreacherId,
                     }).eq('id', user.id);
@@ -4501,7 +4469,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                 } catch (e) {
                   if (!mounted) return;
                   messenger.showSnackBar(
-                    SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: $e')),
+                    SnackBar(backgroundColor: AppColors.sacredRed, content: Text('Error: ' + e.toString())),
                   );
                 }
               },
@@ -4533,51 +4501,64 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Center(
-                child: Text(_profileData?['full_name'] ?? 'Devotee', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                child: Text(_profileData?['full_name'] ?? 'Devotee',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textDark)),
               ),
               Center(child: Text(user?.email ?? '', style: const TextStyle(color: AppColors.textMuted, fontSize: 14))),
               const SizedBox(height: 20),
               if (isSuperAdmin) ...[
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.saffronDark,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14)),
                   icon: const Icon(Icons.security),
                   label: const Text('Change Admin Email / Password'),
                   onPressed: _showAdminSecurityModal,
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.tulsiGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.tulsiGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14)),
                   icon: const Icon(Icons.campaign),
                   label: const Text('Broadcast App Update Notice'),
                   onPressed: () => _postAppUpdateAnnouncement(
-                    title: '🚀 New Update Available (v1.0.22)',
-                    message: 'A fresh update (Build 23) is live with bug fixes. Tap to update your app.',
-                    apkDownloadUrl: 'https://my-sadhna-psi.vercel.app/downloads/my_sadhna.apk',
-                    targetBuildCode: 23,
+                    title: '🚀 New Update Available (v1.0.27)',
+                    message: 'A fresh update is live. Tap to update your app.',
+                    apkDownloadUrl: 'https://mysadhna.vercel.app/downloads/my_sadhna.apk',
+                    targetBuildCode: 27,
                   ),
                 ),
               ] else ...[
                 Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.borderSubtle)),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-
                         ListTile(title: const Text('Phone'), trailing: Text(_profileData?['phone_number'] ?? 'Not set')),
                         const Divider(),
                         ListTile(title: const Text('Profession'), trailing: Text(_profileData?['profession'] ?? 'Not set')),
                         const Divider(),
                         ListTile(title: const Text('Address'), trailing: Text(_profileData?['address'] ?? 'Not set')),
                         const Divider(),
-                        ListTile(title: const Text('Preacher Circle'), trailing: Text(pr != null ? '${pr['display_title']} (${pr['code_suffix']})' : 'None')),
+                        ListTile(
+                            title: const Text('Preacher Circle'),
+                            trailing: Text(pr != null ? pr['display_title'].toString() + ' (' + pr['code_suffix'].toString() + ')' : 'None')),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.saffronPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
                   icon: const Icon(Icons.edit),
                   label: const Text('Edit My Profile Details'),
                   onPressed: _showCounseleeEditModal,
@@ -4587,14 +4568,17 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
               const WebApkDownloadBanner(),
               const SizedBox(height: 20),
               OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.sacredRed, side: const BorderSide(color: AppColors.sacredRed), padding: const EdgeInsets.symmetric(vertical: 14)),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.sacredRed,
+                    side: const BorderSide(color: AppColors.sacredRed),
+                    padding: const EdgeInsets.symmetric(vertical: 14)),
                 onPressed: () async => await supabase.auth.signOut(),
                 child: const Text('Sign Out'),
               ),
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'My Sadhna v1.0.22 (Build $kCurrentInstalledVersionCode)',
+                  'My Sadhna v1.0.22 (Build ' + kCurrentInstalledVersionCode.toString() + ')',
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
@@ -4615,11 +4599,11 @@ class CompactUpdateStrip extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: globalUnreadAlertsNotifier,
       builder: (context, _, __) {
-        // Shown if update notice exists
         return Material(
           color: AppColors.saffronPrimary,
           child: InkWell(
-            onTap: () => launchUrl(Uri.parse('https://my-sadhna.vercel.app/downloads/my_sadhna.apk'), mode: LaunchMode.externalApplication),
+            onTap: () => launchUrl(Uri.parse('https://mysadhna.vercel.app/downloads/my_sadhna.apk'),
+                mode: LaunchMode.externalApplication),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
