@@ -3357,8 +3357,7 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                 const SizedBox(height: 10),
                 TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                TextField(decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🌅, 🔥, 👑)', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
+
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   decoration: const InputDecoration(labelText: 'Assigned Role', border: OutlineInputBorder()),
@@ -4445,10 +4444,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    decoration: const InputDecoration(labelText: 'Emblem Badge (e.g. 🪷, 🌅, 🔥, 👑)', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
+
                   DropdownButtonFormField<String>(
                     initialValue: selectedPreacherId,
                     decoration: const InputDecoration(labelText: 'Assigned Preacher / Counselor Circle', border: OutlineInputBorder()),
@@ -4590,16 +4586,7 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        ListTile(
-                          title: const Text('Emblem Badge'),
-                          trailing: Text(
-                            (_profileData?['avatar_badge']?.toString().isNotEmpty ?? false) && _profileData?['avatar_badge'] != '📿'
-                                ? _profileData!['avatar_badge'].toString()
-                                : 'None',
-                            style: const TextStyle(fontSize: 18),
-                          ),
-                        ),
-                        const Divider(),
+
                         ListTile(title: const Text('Phone'), trailing: Text(_profileData?['phone_number'] ?? 'Not set')),
                         const Divider(),
                         ListTile(title: const Text('Profession'), trailing: Text(_profileData?['profession'] ?? 'Not set')),
