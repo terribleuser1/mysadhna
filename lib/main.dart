@@ -48,6 +48,7 @@ const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_
 
 final supabase = Supabase.instance.client;
 final ValueNotifier<String> appLanguage = ValueNotifier<String>('en');
+final ValueNotifier<int> globalUnreadNoticeCount = ValueNotifier<int>(0);
 
 String formatIndianNumber(num count) {
   if (count >= 10000000) {
@@ -512,7 +513,6 @@ class NotificationBellIcon extends StatefulWidget {
 }
 
 class _NotificationBellIconState extends State<NotificationBellIcon> {
-  int _unreadCount = 0;
   int _totalFeedCount = 0;
   RealtimeChannel? _subscription;
 
@@ -551,7 +551,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
         final prefs = await SharedPreferences.getInstance();
         final lastSeenCount = prefs.getInt('last_seen_notice_count') ?? 0;
         final unread = _totalFeedCount > lastSeenCount ? (_totalFeedCount - lastSeenCount) : 0;
-        setState(() => _unreadCount = unread);
+        globalUnreadNoticeCount.value = unread;
       }
     } catch (_) {}
   }
@@ -559,7 +559,7 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
   void _openInbox() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('last_seen_notice_count', _totalFeedCount);
-    setState(() => _unreadCount = 0);
+    globalUnreadNoticeCount.value = 0;
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -571,30 +571,42 @@ class _NotificationBellIconState extends State<NotificationBellIcon> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications_none_rounded, size: 26),
-          tooltip: 'Noticeboard',
-          onPressed: _openInbox,
-        ),
-        if (_unreadCount > 0)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                _unreadCount > 9 ? '9+' : '$_unreadCount',
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
+    return ValueListenableBuilder<int>(
+      valueListenable: globalUnreadNoticeCount,
+      builder: (context, count, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded, size: 26),
+              tooltip: 'Noticeboard',
+              onPressed: _openInbox,
             ),
-          ),
-      ],
+            if (count > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDC2626),
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
