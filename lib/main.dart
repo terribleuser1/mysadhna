@@ -26,7 +26,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 25; // Matched with build +22
+const int kCurrentInstalledVersionCode = 26; // Matched with build +22
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -2129,17 +2129,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
 
     try {
       final doc = pw.Document();
-      final now = DateTime.now();
-    final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final monthEntries = entries.where((e) {
-      try {
-        final d = DateTime.parse(e.entryDate);
-        return d.isAfter(firstDayOfMonth.subtract(const Duration(days: 1))) && d.month == now.month && d.year == now.year;
-      } catch (_) {
-        return false;
-      }
-    }).toList();
-    final totalSP = monthEntries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
+      final totalSP = entries.fold<double>(0, (sum, e) => sum + e.calculatedScore);
       final totalRounds = entries.fold<int>(0, (sum, e) => sum + e.chantingRounds);
       final totalBookMins = entries.fold<int>(0, (sum, e) => sum + e.spBookReadingMinutes);
       final totalHearingMins = entries.fold<int>(0, (sum, e) => sum + e.spLectureMinutes + e.otherHearingMinutes);
@@ -2328,7 +2318,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                           ),
                         ),
 
-                        // --- CURRENT MONTH SUKRITI POINTS ---
+                        // --- ACCUMULATED SUKRITI POINTS ---
                         Container(
                           padding: const EdgeInsets.all(22),
                           decoration: BoxDecoration(
@@ -2339,7 +2329,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isHindi ? 'संचित सुकृति अंक' : 'CURRENT MONTH SUKRITI POINTS',
+                                isHindi ? 'संचित सुकृति अंक' : 'ACCUMULATED SUKRITI POINTS',
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 11,
@@ -2355,7 +2345,7 @@ class _DevoteeSelfDashboardScreenState extends State<DevoteeSelfDashboardScreen>
                               Text(
                                 isHindi
                                     ? 'औसत: ${stats.avgSP.toStringAsFixed(1)} SP / दिन • ${stats.count} दिन दर्ज (पिछले ३० दिन)'
-                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (This Month)',
+                                    : 'Avg: ${stats.avgSP.toStringAsFixed(1)} SP / day • ${stats.count} Days Logged (All-Time)',
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                               ),
                             ],
