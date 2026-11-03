@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+
+
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -16,17 +19,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+void launchSafeWhatsAppDigest({required BuildContext context, required String title, required String message}) {
+  final encoded = Uri.encodeComponent('*' + title + '*\n\n' + message);
+  final uri = Uri.parse('https://wa.me/?text=$encoded');
+  launchUrl(uri, mode: LaunchMode.externalApplication);
+}
 
 
+
+
+
+
+
+
+
+
+final ValueNotifier<ThemeMode> globalThemeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
 final ValueNotifier<int> globalUnreadAlertsNotifier = ValueNotifier<int>(0);
 
-final ValueNotifier<int> globalUnreadAlerts = ValueNotifier<int>(0);
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-const int kCurrentInstalledVersionCode = 26; // Matched with build +22
+const int kCurrentInstalledVersionCode = 27; // Matched with build +22
 const String kVercelApkDownloadUrl = 'https://my-sadhna.vercel.app/downloads/my_sadhna.apk';
 
 final supabase = Supabase.instance.client;
@@ -426,32 +443,61 @@ class MySadhnaApp extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: appLanguage,
       builder: (context, lang, _) {
-        return MaterialApp(
-          title: 'My Sadhna',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            useMaterial3: true,
-            scaffoldBackgroundColor: AppColors.creamBg,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppColors.saffronPrimary,
-              primary: AppColors.saffronPrimary,
-              secondary: AppColors.saffronDark,
-              surface: AppColors.cardBg,
-            ),
-            appBarTheme: AppBarTheme(
-              backgroundColor: AppColors.creamBg,
-              elevation: 0,
-              centerTitle: true,
-              titleTextStyle: GoogleFonts.cinzel(
-                color: AppColors.textDark,
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
+        return ValueListenableBuilder<ThemeMode>(
+          valueListenable: globalThemeMode,
+          builder: (context, mode, _) => MaterialApp(
+            title: 'My Sadhna',
+            debugShowCheckedModeBanner: false,
+            themeMode: mode,
+            theme: ThemeData(
+              useMaterial3: true,
+              brightness: Brightness.light,
+              scaffoldBackgroundColor: const Color(0xFFFDFBF7),
+              colorSchemeSeed: AppColors.saffronPrimary,
+              cardColor: Colors.white,
+              appBarTheme: AppBarTheme(
+                backgroundColor: AppColors.creamBg,
+                elevation: 0,
+                centerTitle: true,
+                titleTextStyle: GoogleFonts.cinzel(
+                  color: AppColors.textDark,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+                iconTheme: const IconThemeData(color: AppColors.textDark),
               ),
-              iconTheme: const IconThemeData(color: AppColors.textDark),
+            ),
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              brightness: Brightness.dark,
+              scaffoldBackgroundColor: const Color(0xFF121212),
+              cardColor: const Color(0xFF1E1E1E),
+              colorScheme: const ColorScheme.dark(
+                primary: AppColors.saffronPrimary,
+                surface: Color(0xFF1E1E1E),
+                onSurface: Color(0xFFF8FAFC),
+              ),
+              appBarTheme: AppBarTheme(
+                backgroundColor: const Color(0xFF1E1E1E),
+                elevation: 0,
+                centerTitle: true,
+                titleTextStyle: GoogleFonts.cinzel(
+                  color: Colors.white,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+                iconTheme: const IconThemeData(color: Colors.white),
+              ),
+            ),
+            home: const Column(
+              children: [
+                CompactUpdateStrip(),
+                Expanded(child: AuthGate()),
+              ],
             ),
           ),
-          home: const AuthGate(),
         );
       },
     );
@@ -1524,45 +1570,66 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                 ],
                 const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.saffronPrimary),
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            if (_isLoginMode) {
-                              _handleAuth();
-                            } else {
-                              if (_currentStep < 2) {
-                                setState(() => _currentStep++);
-                              } else {
-                                _handleAuth();
-                              }
-                            }
-                          },
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(_isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step' : 'Complete Registration'),
-                            style:
-                                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                  ),
+                Row(
+                  children: [
+                    if (!_isLoginMode && _currentStep > 0) ...[
+                      Expanded(
+                        flex: 1,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: AppColors.saffronPrimary, width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: const Icon(Icons.arrow_back, color: AppColors.saffronDark, size: 18),
+                          label: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.saffronDark)),
+                          onPressed: () => setState(() => _currentStep--),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.saffronPrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                if (_isLoginMode) {
+                                  _handleAuth();
+                                } else {
+                                  if (_currentStep < 2) {
+                                    setState(() => _currentStep++);
+                                  } else {
+                                    _handleAuth();
+                                  }
+                                }
+                              },
+                        child: _isLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(
+                                _isLoginMode ? 'Sign In' : (_currentStep < 2 ? 'Next Step →' : 'Complete Registration'),
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 46),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    minimumSize: const Size(double.infinity, 46),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
                   icon: const Icon(Icons.account_circle, color: AppColors.saffronDark),
-                  label: const Text('One-Tap Google Sign-In',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
+                  label: const Text('One-Tap Google Sign-In', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
                   onPressed: _isLoading ? null : _handleGoogleSignIn,
                 ),
-                if (!_isLoginMode && _currentStep > 0)
-                  TextButton(
-                      onPressed: () => setState(() => _currentStep--),
-                      child: const Text('Back to previous step', style: TextStyle(color: AppColors.textMuted))),
               ],
             ),
           ),
@@ -2965,6 +3032,129 @@ class SuperAdminConsoleScreen extends StatefulWidget {
 }
 
 class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with SingleTickerProviderStateMixin {
+
+  void _showAdminSadhanaManagementModal(DevoteeProfileItem devotee) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Manage Sadhana: ${devotee.fullName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 6),
+              const Text('Reset entries, streaks, and scores for this devotee.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Divider(height: 24),
+              ListTile(
+                leading: const Icon(Icons.today, color: AppColors.saffronDark),
+                title: const Text('Delete Single Date Entry'),
+                subtitle: const Text('Remove a mistaken entry for one specific day'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2023),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    final dateStr = DateFormat('yyyy-MM-dd').format(picked);
+                    await _adminDeleteSadhanaSingleDate(devotee.id, dateStr);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.date_range, color: Colors.orange),
+                title: const Text('Delete Date Range'),
+                subtitle: const Text('Clear entries between two dates'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2023),
+                    lastDate: DateTime.now(),
+                  );
+                  if (range != null) {
+                    await _adminDeleteSadhanaRange(devotee.id, range.start, range.end);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: AppColors.sacredRed),
+                title: const Text('Wipe All-Time Sadhana (Full Reset)', style: TextStyle(color: AppColors.sacredRed, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Resets points to 0 and recalculates streaks'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dCtx) => AlertDialog(
+                      title: const Text('Confirm Full Reset'),
+                      content: Text('Are you sure you want to permanently delete all sadhana records for ${devotee.fullName}?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.sacredRed, foregroundColor: Colors.white),
+                          onPressed: () => Navigator.pop(dCtx, true),
+                          child: const Text('Delete All Records'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await _adminDeleteSadhanaAllTime(devotee.id);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Future<void> _adminDeleteSadhanaSingleDate(String userId, String date) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await supabase.from('sadhana_entries').delete().match({'user_id': userId, 'entry_date': date});
+      messenger.showSnackBar(SnackBar(content: Text('Deleted sadhana entry for $date')));
+      _refresh();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _adminDeleteSadhanaRange(String userId, DateTime start, DateTime end) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final sStr = DateFormat('yyyy-MM-dd').format(start);
+      final eStr = DateFormat('yyyy-MM-dd').format(end);
+      await supabase.from('sadhana_entries')
+          .delete()
+          .eq('user_id', userId)
+          .gte('entry_date', sStr)
+          .lte('entry_date', eStr);
+      messenger.showSnackBar(SnackBar(content: Text('Deleted entries from $sStr to $eStr')));
+      _refresh();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _adminDeleteSadhanaAllTime(String userId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await supabase.from('sadhana_entries').delete().eq('user_id', userId);
+      messenger.showSnackBar(const SnackBar(content: Text('All sadhana records wiped for user.')));
+      _refresh();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')));
+    }
+  }
+
   late Future<AdminStats> _adminFuture;
   late TabController _tabController;
   String _searchFilter = '';
@@ -3323,10 +3513,20 @@ class _SuperAdminConsoleScreenState extends State<SuperAdminConsoleScreen> with 
                         ],
                       ),
                       subtitle: Text('Email: ${d.email}\nRole: ${d.role} • Circle: ${d.preacherTitle}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 28),
-                        tooltip: 'Edit Devotee Details',
-                        onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_note_rounded, color: AppColors.saffronDark, size: 26),
+                            tooltip: 'Edit Devotee Details',
+                            onPressed: () => _showEditDevoteeDialog(d, stats.preachersList),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.auto_delete_outlined, color: AppColors.sacredRed, size: 22),
+                            tooltip: 'Manage / Reset Sadhana',
+                            onPressed: () => _showAdminSadhanaManagementModal(d),
+                          ),
+                        ],
                       ),
                     ),
                   )),
@@ -4438,6 +4638,42 @@ class _ProfileDashboardScreenState extends State<ProfileDashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class CompactUpdateStrip extends StatelessWidget {
+  const CompactUpdateStrip({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) return const SizedBox.shrink();
+    return ValueListenableBuilder<int>(
+      valueListenable: globalUnreadAlertsNotifier,
+      builder: (context, _, __) {
+        // Shown if update notice exists
+        return Material(
+          color: AppColors.saffronPrimary,
+          child: InkWell(
+            onTap: () => launchUrl(Uri.parse('https://my-sadhna.vercel.app/downloads/my_sadhna.apk'), mode: LaunchMode.externalApplication),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.system_update_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Update available • Tap to download & install',
+                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
